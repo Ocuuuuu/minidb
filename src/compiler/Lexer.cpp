@@ -1,4 +1,4 @@
-#include "Lexer.h"
+#include "../../include/compiler/Lexer.h"
 #include <cctype>   // 用于判断字符类型（字母/数字/空格）
 #include <algorithm> // 用于查找关键字
 
