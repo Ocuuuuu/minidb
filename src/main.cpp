@@ -1,18 +1,42 @@
 #include <iostream>
+#include "lexer/Lexer.h"
 
-// TIP 要<b>Run</b>代码，请按 <shortcut actionId="Run"/> 或点击装订区域中的 <icon src="AllIcons.Actions.Execute"/> 图标。
-int main()
-{
-    // TIP 当文本光标位于 <b>lang</b> 变量名称处时，按 <shortcut actionId="RenameElement"/> 可以查看 CLion 如何帮助您重命名该变量。
-    auto lang = "C++";
-    std::cout << "Hello and welcome to " << lang << "!\n";
-
-    for (int i = 1; i <= 5; i++)
-    {
-        // TIP 按 <shortcut actionId="Debug"/> 开始调试代码。我们已为您设置了一个 <icon src="AllIcons.Debugger.Db_set_breakpoint"/> 断点，但您可以随时按 <shortcut actionId="ToggleLineBreakpoint"/> 添加更多断点。
-        std::cout << "i = " << i << std::endl;
+// ������������ӡToken�б���������֤�����
+void PrintTokens(const std::vector<Token>& tokens) {
+    std::cout << "SQL�ʷ��������:\n";
+    std::cout << "----------------------------------------\n";
+    for (const auto& token : tokens) {
+        // ת��TokenTypeΪ�ַ����������Ķ���
+        std::string type_str;
+        switch (token.type) {
+        case TokenType::KEYWORD: type_str = "�ؼ���"; break;
+        case TokenType::ID:      type_str = "��ʶ��"; break;
+        case TokenType::NUMBER:  type_str = "����";   break;
+        case TokenType::OP:      type_str = "�����"; break;
+        case TokenType::RANGE:   type_str = "�ָ���"; break;
+        default:                 type_str = "δ֪";   break;
+        }
+        // ���Token��Ϣ
+        std::cout << "����: " << type_str
+                  << " | ����: " << token.value
+                  << " | λ��: ��" << token.line << " ��" << token.column << "\n";
     }
+}
+
+int main() {
+    // ����SQL���
+    std::string test_sql = R"(
+        CREATE TABLE Students (name STRING, age INT);
+        INSERT INTO Students VALUES ("Tom", 22);
+        SELECT name, age FROM Students WHERE age > 20;
+    )";
+
+    // ִ�дʷ�����
+    Lexer lexer(test_sql);
+    std::vector<Token> tokens = lexer.Tokenize();
+
+    // ��ӡ���
+    PrintTokens(tokens);
 
     return 0;
-    // TIP 请访问 <a href="https://www.jetbrains.com/help/clion/">jetbrains.com/help/clion/</a> 查看 CLion 帮助。此外，您还可以从主菜单中选择“帮助 | 学习 IDE 功能”，尝试 CLion 的交互式课次。
 }
