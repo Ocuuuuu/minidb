@@ -1,0 +1,8 @@
+//
+// Created by 罗飞燕 on 2025/9/10.
+//
+
+#ifndef MINIDB_CATALOG_MANAGER_H
+#define MINIDB_CATALOG_MANAGER_H
+
+#endif //MINIDB_CATALOG_MANAGER_H
