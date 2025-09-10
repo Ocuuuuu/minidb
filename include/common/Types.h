@@ -1,45 +1,48 @@
-//
-//基本类型定义
-//
-// include/common/Types.h
 #pragma once
-#include <string>
-#include <variant>
+
 #include <cstdint>
+#include <string>
 
 namespace minidb {
 
-    // 支持的数据库数据类型
-    enum class DataType {
-        INT,
-        FLOAT,
-        STRING,
-        BOOL,
-        UNKNOWN
+    // 支持的数据库类型枚举
+    enum class TypeId {
+        INVALID,    // 无效类型
+        BOOLEAN,    // 布尔类型
+        INTEGER,    // 整数类型（主要使用这个）
+        VARCHAR     // 字符串类型
     };
 
-    // 数据库值类
-    class Value {
-    public:
-        std::variant<int32_t, float, std::string, bool> data;
-        DataType type;
+    // 获取类型名称的辅助函数
+    const char* getTypeName(TypeId type);
 
-        Value() : type(DataType::UNKNOWN) {}
-        Value(int32_t v) : data(v), type(DataType::INT) {}
-        Value(float v) : data(v), type(DataType::FLOAT) {}
-        Value(const std::string& v) : data(v), type(DataType::STRING) {}
-        Value(bool v) : data(v), type(DataType::BOOL) {}
+    // 记录标识符 (Record Identifier) - 用于定位磁盘上的记录
+    struct RID {
+        int32_t page_id{-1};     // 页号，-1表示无效
+        int32_t slot_num{-1};    // 槽位号，-1表示无效
 
-        // 类型检查和转换方法
-        bool is_int() const { return type == DataType::INT; }
-        bool is_float() const { return type == DataType::FLOAT; }
-        bool is_string() const { return type == DataType::STRING; }
-        bool is_bool() const { return type == DataType::BOOL; }
+        // 重载比较运算符
+        bool operator==(const RID& other) const {
+            return page_id == other.page_id && slot_num == other.slot_num;
+        }
 
-        int32_t as_int() const { return std::get<int32_t>(data); }
-        float as_float() const { return std::get<float>(data); }
-        std::string as_string() const { return std::get<std::string>(data); }
-        bool as_bool() const { return std::get<bool>(data); }
+        bool operator<(const RID& other) const {
+            if (page_id != other.page_id) return page_id < other.page_id;
+            return slot_num < other.slot_num;
+        }
+
+        // 转换为字符串表示（用于调试）
+        std::string toString() const {
+            return "(" + std::to_string(page_id) + ", " + std::to_string(slot_num) + ")";
+        }
+
+        // 检查是否是有效的RID
+        bool isValid() const {
+            return page_id >= 0 && slot_num >= 0;
+        }
+
+        // 静态方法：获取无效的RID
+        static RID invalid() { return RID{-1, -1}; }
     };
 
 } // namespace minidb

@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 4.0)
 project(minidb)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 
-
+#add_executable() 中只应该包含 .cpp 源文件，头文件是通过 include_directories() 让编译器找到的。（要修改）
 add_executable(minidb src/main.cpp
         src/compiler/Lexer.cpp
         include/compiler/Lexer.h
@@ -34,6 +34,10 @@ add_executable(minidb src/main.cpp
         include/common/Types.h
         include/common/Constants.h
         include/common/Exception.h
+        include/common/Value.h
+        include/common/Tuple.h
+        src/common/Value.cpp
+        src/common/Tuple.cpp
 )
 
 # 递归地找到src目录下所有的cpp文件（自动查找），或者可以像上面那样显示的提出
