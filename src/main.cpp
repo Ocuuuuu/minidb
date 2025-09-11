@@ -1,8 +1,8 @@
 #include <iostream>
 #include "../include/compiler/Lexer.h"
 
-#include "./common/Value.h"
-#include "./common/Tuple.h"
+#include "../include/common/Value.h"
+#include "../include/common/Tuple.h"
 
 int main() {
     // ≤‚ ‘Value¿‡
