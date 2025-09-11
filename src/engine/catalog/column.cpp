@@ -1,6 +1,3 @@
-//
-// Created by 罗飞燕 on 2025/9/10.
-//
 #include "../include/engine/catalog/column.h"
 #include <stdexcept> //抛出异常
 

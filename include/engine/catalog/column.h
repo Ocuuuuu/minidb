@@ -1,6 +1,3 @@
-//
-// Created by 罗飞燕 on 2025/9/10.
-//
 //定义一列的元数据
 #pragma once
 
