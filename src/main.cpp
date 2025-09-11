@@ -5,10 +5,11 @@
 #include "../include/common/Tuple.h"
 #include "../include/compiler/Parser.h"
 #include "../include/compiler/AST.h"
-
+#include "../include/engine/catalog/catalog_manager.h"
+#include "../include/compiler/SemanticAnalyzer.h"
 
 using namespace std;
-
+using namespace minidb;
 
 
 
@@ -69,7 +70,8 @@ int main() {
     //          << ", Line: " << token.line
     //          << ", Column: " << token.column << endl;
     // }
-
+    //
+    //
 
     // //²âÊÔÓï·¨·ÖÎöÆ÷
     // // ²âÊÔ SELECT Óï¾ä
@@ -81,8 +83,8 @@ int main() {
     // printAST(ast1.get());
     // cout << endl;
     //
-    // // ²âÊÔ CREATE TABLE Óï¾ä
-    // string sql2 = "CREATE TABLE Students(name STRING, age INT);";
+    // ²âÊÔ CREATE TABLE Óï¾ä
+    // string sql2 = "CREATE TABLE Students(name VARCHAR, age INTEGER);";
     // Lexer lexer2(sql2);
     // Parser parser2(lexer2);
     // auto ast2 = parser2.parse();
@@ -91,12 +93,75 @@ int main() {
     // cout << endl;
     //
     // // ²âÊÔ INSERT Óï¾ä
-    // string sql3 = "INSERT INTO Students VALUES(Alice, 20);";
+    // string sql3 = "INSERT INTO Students VALUES('Alice', 20);";
     // Lexer lexer3(sql3);
     // Parser parser3(lexer3);
     // auto ast3 = parser3.parse();
     // cout << "=== Parsing INSERT statement ===" << endl;
     // printAST(ast3.get());
+
+
+
+    //²âÊÔÓïÒå·ÖÎöÆ÷
+    // ´´½¨Ä¿Â¼¹ÜÀíÆ÷
+    CatalogManager catalog_manager;
+
+    // ²âÊÔCREATE TABLE
+    try {
+        string sql_create = "CREATE TABLE Students(name VARCHAR, age INTEGER);";
+        Lexer lexer_create(sql_create);
+        Parser parser_create(lexer_create);
+        auto ast_create = parser_create.parse();
+        cout << "=== Parsing CREATE TABLE statement ===" << endl;
+        printAST(ast_create.get());
+        cout << endl;
+
+        // Ö´ÐÐÓïÒå·ÖÎö
+        SemanticAnalyzer analyzer(catalog_manager);
+        analyzer.analyze(ast_create.get());
+        cout << "=== Semantic Check Passed: CREATE TABLE is valid ===" << endl << endl;
+    } catch (const SemanticError& e) {
+        cerr << "=== Semantic Error (CREATE TABLE): " << e.what() << " ===" << endl;
+        return 1;
+    }
+
+    // ²âÊÔINSERT
+    try {
+        string sql_insert = "INSERT INTO Students VALUES(Alice, 20);";
+        Lexer lexer_insert(sql_insert);
+        Parser parser_insert(lexer_insert);
+        auto ast_insert = parser_insert.parse();
+        cout << "=== Parsing INSERT statement ===" << endl;
+        printAST(ast_insert.get());
+        cout << endl;
+
+        // Ö´ÐÐÓïÒå·ÖÎö
+        SemanticAnalyzer analyzer(catalog_manager);
+        analyzer.analyze(ast_insert.get());
+        cout << "=== Semantic Check Passed: INSERT is valid ===" << endl << endl;
+    } catch (const SemanticError& e) {
+        cerr << "=== Semantic Error (INSERT): " << e.what() << " ===" << endl;
+        return 1;
+    }
+
+    // ²âÊÔSELECT
+    try {
+        string sql_select = "SELECT name, age FROM Students WHERE age > 20;";
+        Lexer lexer_select(sql_select);
+        Parser parser_select(lexer_select);
+        auto ast_select = parser_select.parse();
+        cout << "=== Parsing SELECT statement ===" << endl;
+        printAST(ast_select.get());
+        cout << endl;
+
+        // Ö´ÐÐÓïÒå·ÖÎö
+        SemanticAnalyzer analyzer(catalog_manager);
+        analyzer.analyze(ast_select.get());
+        cout << "=== Semantic Check Passed: SELECT is valid ===" << endl;
+    } catch (const SemanticError& e) {
+        cerr << "=== Semantic Error (SELECT): " << e.what() << " ===" << endl;
+        return 1;
+    }
 
     return 0;
 }

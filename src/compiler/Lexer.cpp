@@ -12,7 +12,9 @@ Lexer::Lexer(string s):sql(std::move(s)),pos(0),line(1),column(0)
 //初始化关键字集合
 void Lexer::initKeywords()
 {
-    keywords = {"SELECT", "FROM", "WHERE", "CREATE", "TABLE", "INSERT", "INTO", "VALUES"};
+    keywords = {"SELECT", "FROM", "WHERE", "CREATE", "TABLE",
+                                 "INSERT", "INTO", "VALUES", "INT", "INTEGER",
+                                 "STRING", "VARCHAR", "int", "integer", "string", "varchar"};
 }
 
 
