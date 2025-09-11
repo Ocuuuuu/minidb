@@ -40,6 +40,4 @@ add_executable(minidb src/main.cpp
         include/common/Token.h
         src/common/Tuple.cpp
         src/common/Value.cpp
-        include/compiler/AST.h
-        include/compiler/AST.h
 )
