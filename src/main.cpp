@@ -71,32 +71,32 @@ int main() {
     // }
 
 
-
-    // ²âÊÔ SELECT Óï¾ä
-    string sql1 = "SELECT name, age FROM Students WHERE age > 20;";
-    Lexer lexer1(sql1);
-    Parser parser1(lexer1);
-    auto ast1 = parser1.parse();
-    cout << "=== Parsing SELECT statement ===" << endl;
-    printAST(ast1.get());
-    cout << endl;
-
-    // ²âÊÔ CREATE TABLE Óï¾ä
-    string sql2 = "CREATE TABLE Students(name STRING, age INT);";
-    Lexer lexer2(sql2);
-    Parser parser2(lexer2);
-    auto ast2 = parser2.parse();
-    cout << "=== Parsing CREATE TABLE statement ===" << endl;
-    printAST(ast2.get());
-    cout << endl;
-
-    // ²âÊÔ INSERT Óï¾ä
-    string sql3 = "INSERT INTO Students VALUES(Alice, 20);";
-    Lexer lexer3(sql3);
-    Parser parser3(lexer3);
-    auto ast3 = parser3.parse();
-    cout << "=== Parsing INSERT statement ===" << endl;
-    printAST(ast3.get());
+    // //²âÊÔÓï·¨·ÖÎöÆ÷
+    // // ²âÊÔ SELECT Óï¾ä
+    // string sql1 = "SELECT name, age FROM Students WHERE age > 20;";
+    // Lexer lexer1(sql1);
+    // Parser parser1(lexer1);
+    // auto ast1 = parser1.parse();
+    // cout << "=== Parsing SELECT statement ===" << endl;
+    // printAST(ast1.get());
+    // cout << endl;
+    //
+    // // ²âÊÔ CREATE TABLE Óï¾ä
+    // string sql2 = "CREATE TABLE Students(name STRING, age INT);";
+    // Lexer lexer2(sql2);
+    // Parser parser2(lexer2);
+    // auto ast2 = parser2.parse();
+    // cout << "=== Parsing CREATE TABLE statement ===" << endl;
+    // printAST(ast2.get());
+    // cout << endl;
+    //
+    // // ²âÊÔ INSERT Óï¾ä
+    // string sql3 = "INSERT INTO Students VALUES(Alice, 20);";
+    // Lexer lexer3(sql3);
+    // Parser parser3(lexer3);
+    // auto ast3 = parser3.parse();
+    // cout << "=== Parsing INSERT statement ===" << endl;
+    // printAST(ast3.get());
 
     return 0;
 }
