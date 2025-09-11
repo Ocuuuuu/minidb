@@ -2,45 +2,42 @@
 #define MINIDB_LEXER_H
 
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
-// Token类型（对应SQL中的基础元素）
-enum class TokenType {
-    KEYWORD,   // 关键字：SELECT/FROM/WHERE等
-    ID,        // 标识符：表名/列名（如Students/name）
-    NUMBER,    // 数字常量（如20）
-    OP,        // 运算符：>、=、+等
-    RANGE,     // 分隔符：,、;
-    UNKNOWN    // 未知符号
-};
+#include "common/Token.h"
+using namespace std;
 
-// Token结构（存储单个词法单元信息）
-struct Token {
-    TokenType type;       // 类型
-    std::string value;    // 内容（如"SELECT"、"name"）
-    int line;             // 行号（调试用）
-    int column;           // 列号（调试用）
-
-    // 添加构造函数
-    Token(TokenType t, const std::string& val, int l, int col)
-        : type(t), value(val), line(l), column(col) {}
-
-};
-
-// 词法分析器类（核心功能：将SQL字符串拆分为Token列表）
+//词法分析器类（将SQL字符串拆分为Token序列）
 class Lexer {
 private:
-    std::string sql_;     // 输入的SQL语句
-    std::vector<std::string> keywords_ = {  // 关键字列表
-        "SELECT", "FROM", "WHERE", "CREATE", "TABLE", "INSERT", "INTO", "VALUES"
-    };
+    string sql;     //输入的SQL语句
+    size_t pos;//当前处理到的符号位置
+    int line;//当前行号
+    int column;//列号
+    unordered_set<string> keywords;//预定义的关键字集合
+
+    //初始化关键字集合
+    void initKeywords();
+    //跳过空白字符，并更新行号和列号
+    void skipWhitespace();
+    //处理标识符和关键字
+    Token handleIdentifierOrKeyword();
+    //处理常数
+    Token handleConstant();
+    //处理运算符
+    Token handleOperator();
+    //处理界符
+    Token handleDelimiter();
 
 public:
-    // 构造函数（传入SQL语句）
-    explicit Lexer(std::string sql) : sql_(std::move(sql)) {}
-
-    // 核心方法：执行词法分析，返回Token列表
-    std::vector<Token> Tokenize();
+    //构造函数（传入SQL语句）
+    explicit Lexer(string s);
+    //获取下一个Token
+    Token nextToken();
+    //获取所有Token 直到遇到EOF_Token
+    vector<Token> getAllTokens();
 };
 
 #endif //MINIDB_LEXER_H

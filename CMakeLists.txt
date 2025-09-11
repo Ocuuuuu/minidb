@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 
-#add_executable() 中只应该包含 .cpp 源文件，头文件是通过 include_directories() 让编译器找到的。（要修改）
+
 add_executable(minidb src/main.cpp
         src/compiler/Lexer.cpp
         include/compiler/Lexer.h
@@ -34,14 +34,10 @@ add_executable(minidb src/main.cpp
         include/common/Types.h
         include/common/Constants.h
         include/common/Exception.h
-        include/common/Value.h
-        include/common/Tuple.h
-        src/common/Value.cpp
+        include/common/TokenType.h
+        include/common/TokenType.h
+        include/common/Types.h
+        include/common/Token.h
         src/common/Tuple.cpp
+        src/common/Value.cpp
 )
-
-# 递归地找到src目录下所有的cpp文件（自动查找），或者可以像上面那样显示的提出
-file(GLOB_RECURSE SOURCES "src/*.cpp")
-
-## 创建可执行文件
-#add_executable(${PROJECT_NAME} main.cpp ${SOURCES})

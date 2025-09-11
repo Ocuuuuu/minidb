@@ -1,4 +1,4 @@
-#include "./common/Tuple.h"
+#include "../include/common/Tuple.h"
 #include <sstream>
 
 namespace minidb {
