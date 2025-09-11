@@ -1,5 +1,5 @@
 /*
- * Parser.cpp - 基于LL(1)文法的SQL语法解析器（最终稳定版）
+ * Parser.cpp - 基于LL(1)文法的SQL语法解析器
  * 支持SQL语句类型：
  * 1. SELECT（带WHERE子句、多列查询、通配符*）
  * 2. CREATE TABLE（多列定义，支持STRING/INT类型）
@@ -14,18 +14,18 @@
 
 using namespace std;
 
-// ========================== 构造函数 ==========================
+//构造函数
 Parser::Parser(Lexer& l)
     : lexer(l),
       currentToken(TokenType::ERROR, "", -1, -1),
       tokenPos(0) {
     initPredictTable();
-    // 语法栈初始化：栈底为EOF（结束符），栈顶为开始符号Prog
+    //语法栈初始化：栈底为EOF（结束符），栈顶为开始符号Prog
     symStack.push("EOF");
     symStack.push("Prog");
-    // 从词法分析器获取所有Token并缓存
+    //从词法分析器获取所有Token并缓存
     tokens = lexer.getAllTokens();
-    // 初始化当前Token（若Token流非空）
+    //初始化当前Token（若Token流非空）
     if (!tokens.empty()) {
         currentToken = tokens[tokenPos];
     } else {
@@ -33,7 +33,7 @@ Parser::Parser(Lexer& l)
     }
 }
 
-// ========================== 预测表初始化（LL(1)核心） ==========================
+//预测表初始化（LL(1)）
 void Parser::initPredictTable() {
     // 1. 程序入口规则：Prog → Stmt EOF（一条SQL语句 + 结束符）
     predictTable["Prog|SELECT"] = {"Stmt", "EOF"};
@@ -94,7 +94,7 @@ void Parser::initPredictTable() {
     predictTable["Condition|IDENTIFIER"] = {"IDENTIFIER", "OPERATOR", "CONSTANT"};
 }
 
-// ========================== 调试辅助函数 ==========================
+//调试辅助函数
 // void Parser::debugString(const string& s, const string& label) {
     // cerr << "[Debug] " << label << " - 长度: " << s.length() << ", 字符: ";
     // for (char c : s) {
@@ -116,13 +116,10 @@ void Parser::initPredictTable() {
     // cerr << endl;
 // }
 
-// ========================== 核心解析函数 ==========================
-/**
- * 解析非终结符：根据当前Token和预测表，压入对应产生式符号
- * @param nonTerminal 要解析的非终结符（如 "Prog"、"Stmt"）
- */
+//核心解析函数
+// 解析非终结符：根据当前Token和预测表，压入对应产生式符号
 void Parser::parseNonTerminal(const string& nonTerminal) {
-    // 1. 生成当前Token的标识（用于查询预测表，如 "SELECT"、"IDENTIFIER"）
+    //1. 生成当前Token的标识（用于查询预测表，如 "SELECT"、"IDENTIFIER"）
     string currentTokenKey;
     if (currentToken.type == TokenType::KEYWORD) {
         currentTokenKey = currentToken.value;
@@ -140,7 +137,7 @@ void Parser::parseNonTerminal(const string& nonTerminal) {
         throw runtime_error("未知Token类型: " + to_string(static_cast<int>(currentToken.type)));
     }
 
-    // 2. 构建预测表查询键（格式："非终结符|当前Token标识"）
+    //2. 构建预测表查询键（格式："非终结符|当前Token标识"）
     string tableKey = nonTerminal + "|" + currentTokenKey;
     if (predictTable.find(tableKey) == predictTable.end()) {
         stringstream errMsg;
@@ -150,7 +147,7 @@ void Parser::parseNonTerminal(const string& nonTerminal) {
     }
     vector<string> production = predictTable[tableKey];
 
-    // 3. 验证语法栈顶是否为当前非终结符（确保解析逻辑正确性）
+    //3. 验证语法栈顶是否为当前非终结符（确保解析逻辑正确性）
     if (symStack.empty() || symStack.top() != nonTerminal) {
         stringstream errMsg;
         errMsg << "栈顶异常：解析'" << nonTerminal << "'时，预期'" << nonTerminal
@@ -158,7 +155,7 @@ void Parser::parseNonTerminal(const string& nonTerminal) {
         throw runtime_error(errMsg.str());
     }
 
-    // 4. 弹出非终结符，逆序压入产生式符号（栈后进先出，保证解析顺序正确）
+    //4. 弹出非终结符，逆序压入产生式符号（栈后进先出，保证解析顺序正确）
     symStack.pop();
     // cerr << "[parseNonTerminal] 弹出非终结符: " << nonTerminal << endl;
 
@@ -170,22 +167,20 @@ void Parser::parseNonTerminal(const string& nonTerminal) {
     }
 }
 
-/**
- * 匹配终结符：检查当前Token是否与预期一致，匹配成功则推进Token流
- * @param expectedValue 预期的终结符标识（如 "KEYWORD(SELECT)"、"LPAREN"）
- */
+
+// 匹配终结符：检查当前Token是否与预期一致，匹配成功则推进Token流
 void Parser::match(const string& expectedValue) {
-    // 1. 生成当前Token的标识（与预期值格式对齐）
+    //1. 生成当前Token的标识（与预期值格式对齐）
     string currentTokenKey;
     if (currentToken.type == TokenType::KEYWORD) {
         currentTokenKey = "KEYWORD(" + currentToken.value + ")";
     } else if (currentToken.type == TokenType::IDENTIFIER) {
         currentTokenKey = "IDENTIFIER";
-        // 兼容处理1：无引号字符串按CONSTANT匹配（针对INSERT值列表）
+        //兼容处理1：无引号字符串按CONSTANT匹配（针对INSERT值列表）
         if (expectedValue == "CONSTANT") {
             currentTokenKey = "CONSTANT";
         }
-        // 兼容处理2：类型关键字（INT/STRING）按KEYWORD匹配（针对CREATE TABLE列类型）
+        //兼容处理2：类型关键字（INT/STRING）按KEYWORD匹配（针对CREATE TABLE列类型）
         if (currentToken.value == "INT" || currentToken.value == "STRING") {
             currentTokenKey = "KEYWORD(" + currentToken.value + ")";
         }
@@ -194,7 +189,7 @@ void Parser::match(const string& expectedValue) {
     } else if (currentToken.type == TokenType::OPERATOR) {
         currentTokenKey = "OPERATOR";
     } else if (currentToken.type == TokenType::DELIMITER) {
-        // 映射分隔符到统一常量（与预测表符号一致）
+        //映射分隔符到统一常量（与预测表符号一致）
         if (currentToken.value == "(") {
             currentTokenKey = LPAREN;
         } else if (currentToken.value == ")") {
@@ -214,7 +209,7 @@ void Parser::match(const string& expectedValue) {
         throw runtime_error("未知Token类型: " + to_string(static_cast<int>(currentToken.type)));
     }
 
-    // 2. 特殊匹配：类型关键字（INT/STRING）匹配"KEYWORD(TYPE)"
+    //2. 特殊匹配：类型关键字（INT/STRING）匹配"KEYWORD(TYPE)"
     bool isTypeMatch = (expectedValue == "KEYWORD(TYPE)" &&
                       (currentTokenKey == "KEYWORD(INT)" || currentTokenKey == "KEYWORD(STRING)"));
     if (!isTypeMatch && currentTokenKey != expectedValue) {
@@ -224,12 +219,12 @@ void Parser::match(const string& expectedValue) {
         throw runtime_error(errMsg.str());
     }
 
-    // 3. 推进Token流（无论是否匹配成功，异常已提前抛出）
+    //3. 推进Token流（无论是否匹配成功，异常已提前抛出）
     string matchedValue = currentToken.value;
     tokenPos++;
     currentToken = (tokenPos < tokens.size()) ? tokens[tokenPos] : Token(TokenType::EOF_TOKEN, "", -1, -1);
 
-    // // 4. 输出匹配信息（便于调试，区分普通匹配和类型匹配）
+    // //4. 输出匹配信息（便于调试，区分普通匹配和类型匹配）
     // if (isTypeMatch) {
     //     cerr << "[match] 类型匹配: " << expectedValue << " <- " << matchedValue << endl;
     // } else {
@@ -237,7 +232,7 @@ void Parser::match(const string& expectedValue) {
     // }
 }
 
-// ========================== 语句解析函数 ==========================
+//语句解析函数
 /**
  * 解析程序入口：Prog → Stmt EOF
  * @return AST根节点（对应一条SQL语句的AST）
@@ -246,11 +241,11 @@ unique_ptr<ASTNode> Parser::parseProg() {
     parseNonTerminal("Prog");
     unique_ptr<ASTNode> stmtAST = parseStmt();
 
-    // 关键修复：清理Stmt解析后可能残留的非终结符（确保栈顶为EOF）
+    //清理Stmt解析后可能残留的非终结符（确保栈顶为EOF）
     while (!symStack.empty()) {
         string top = symStack.top();
         if (top != "EOF") {
-            // 仅弹出非EOF的残留符号（避免误删EOF）
+            //仅弹出非EOF的残留符号（避免误删EOF）
             symStack.pop();
             cerr << "[parseProg] 清理Stmt残留符号: " << top << endl;
         } else {
@@ -258,7 +253,7 @@ unique_ptr<ASTNode> Parser::parseProg() {
         }
     }
 
-    // 匹配结束符EOF（确保语句完整）
+    //匹配结束符EOF（确保语句完整）
     if (!symStack.empty() && symStack.top() == "EOF") {
         match("EOF");
         symStack.pop();
@@ -266,7 +261,7 @@ unique_ptr<ASTNode> Parser::parseProg() {
         throw runtime_error("解析结束后栈顶应为'EOF'");
     }
 
-    // 重新压入EOF，为下一条语句解析做准备（若有）
+    //重新压入EOF，为下一条语句解析做准备（若有）
     symStack.push("EOF");
     return stmtAST;
 }
@@ -300,16 +295,16 @@ unique_ptr<ASTNode> Parser::parseStmt() {
 unique_ptr<SelectAST> Parser::parseSelect() {
     parseNonTerminal("Select");
 
-    // 1. 匹配SELECT关键字
+    //1. 匹配SELECT关键字
     match("KEYWORD(SELECT)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(SELECT)") {
         symStack.pop();
     }
 
-    // 2. 解析查询列列表（如 "name, age" 或 "*"）
+    //2. 解析查询列列表（如 "name, age" 或 "*"）
     vector<string> selectCols = parseSelectColumns();
 
-    // 3. 匹配FROM关键字（确保语法结构正确）
+    //3. 匹配FROM关键字（确保语法结构正确）
     if (symStack.empty() || symStack.top() != "KEYWORD(FROM)") {
         // 清理栈中剩余的SelectColumns'符号
         while (!symStack.empty() && symStack.top() == "SelectColumns'") {
@@ -323,23 +318,23 @@ unique_ptr<SelectAST> Parser::parseSelect() {
     match("KEYWORD(FROM)");
     symStack.pop();
 
-    // 4. 解析查询表名
+    //4. 解析查询表名
     string tableName = currentToken.value;
     match("IDENTIFIER");
     if (!symStack.empty() && symStack.top() == "IDENTIFIER") {
         symStack.pop();
     }
 
-    // 5. 解析WHERE子句（可选，无WHERE时返回空）
+    //5. 解析WHERE子句（可选，无WHERE时返回空）
     optional<Condition> condition = parseWhereClause();
 
-    // 6. 匹配语句结束分号
+    //6. 匹配语句结束分号
     match("SEMICOLON");
     if (!symStack.empty() && symStack.top() == "SEMICOLON") {
         symStack.pop();
     }
 
-    // 构建SelectAST并返回
+    //构建SelectAST并返回
     auto ast = make_unique<SelectAST>();
     ast->columns = selectCols;
     ast->tableName = tableName;
@@ -355,53 +350,53 @@ unique_ptr<SelectAST> Parser::parseSelect() {
 unique_ptr<InsertAST> Parser::parseInsert() {
     parseNonTerminal("Insert");
 
-    // 1. 匹配INSERT关键字
+    //1. 匹配INSERT关键字
     match("KEYWORD(INSERT)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(INSERT)") {
         symStack.pop();
     }
 
-    // 2. 匹配INTO关键字
+    //2. 匹配INTO关键字
     match("KEYWORD(INTO)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(INTO)") {
         symStack.pop();
     }
 
-    // 3. 解析目标表名
+    //3. 解析目标表名
     string tableName = currentToken.value;
     match("IDENTIFIER");
     if (!symStack.empty() && symStack.top() == "IDENTIFIER") {
         symStack.pop();
     }
 
-    // 4. 匹配VALUES关键字
+    //4. 匹配VALUES关键字
     match("KEYWORD(VALUES)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(VALUES)") {
         symStack.pop();
     }
 
-    // 5. 匹配左括号（值列表开始）
+    //5. 匹配左括号（值列表开始）
     match(LPAREN);
     if (!symStack.empty() && symStack.top() == LPAREN) {
         symStack.pop();
     }
 
-    // 6. 解析插入值列表（如 "'Alice', 20"）
+    //6. 解析插入值列表（如 "'Alice', 20"）
     vector<string> values = parseValueList();
 
-    // 7. 匹配右括号（值列表结束）
+    //7. 匹配右括号（值列表结束）
     match(RPAREN);
     if (!symStack.empty() && symStack.top() == RPAREN) {
         symStack.pop();
     }
 
-    // 8. 匹配语句结束分号
+    //8. 匹配语句结束分号
     match("SEMICOLON");
     if (!symStack.empty() && symStack.top() == "SEMICOLON") {
         symStack.pop();
     }
 
-    // 构建InsertAST并返回
+    //构建InsertAST并返回
     auto ast = make_unique<InsertAST>();
     ast->tableName = tableName;
     ast->values = values;
@@ -410,8 +405,7 @@ unique_ptr<InsertAST> Parser::parseInsert() {
 
 /**
  * 解析CREATE TABLE语句：生成CreateTableAST节点
- * 支持：多列定义，列类型为STRING/INT
- * 核心修复：通过临时栈管理栈状态，避免RPAREN/SEMICOLON干扰列列表解析
+ * 支持多列定义，列类型为STRING/INT
  * @return CreateTableAST节点（包含表名、列列表）
  */
 unique_ptr<CreateTableAST> Parser::parseCreateTable() {
@@ -511,7 +505,7 @@ unique_ptr<CreateTableAST> Parser::parseCreateTable() {
     return ast;
 }
 
-// ========================== 列表解析函数 ==========================
+//列表解析函数
 /**
  * 解析查询列列表（SELECT用）：如 "name, age" 或 "*"
  * @return 查询列名称列表（如 ["name", "age"] 或 ["*"]）
@@ -663,7 +657,7 @@ vector<Column> Parser::parseColumnList() {
     return columns;
 }
 
-// ========================== 辅助解析函数（递归部分） ==========================
+//辅助解析函数（递归部分
 /**
  * 解析查询列列表递归部分：SelectColumns' → , IDENTIFIER SelectColumns' | ε
  */
@@ -776,7 +770,7 @@ optional<Condition> Parser::parseWhereClause() {
     return nullopt;
 }
 
-// ========================== 对外接口 ==========================
+//对外接口
 /**
  * 核心解析接口：执行语法分析，生成AST
  * @return AST根节点（成功时为具体语句的AST，失败时为nullptr）
@@ -802,7 +796,7 @@ unique_ptr<ASTNode> Parser::parse() {
     }
 }
 
-// ========================== AST打印函数（辅助调试） ==========================
+//AST打印函数（辅助调试
 void printAST(ASTNode* ast) {
     if (!ast) {
         cout << "AST节点为空（解析失败）" << endl;
