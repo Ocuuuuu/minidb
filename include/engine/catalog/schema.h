@@ -26,11 +26,43 @@ namespace minidb {
         // 核心查询接口
         const std::vector<Column>& get_columns() const { return columns_; } ///< 获取所有列
         const Column& get_column(uint32_t column_index) const; ///< 根据索引获取特定列
+        const Column& get_column(int column_index) const; ///< 根据索引获取特定列(int版本)
         uint32_t get_column_count() const { return columns_.size(); } ///< 获取列数量
         uint32_t get_length() const { return length_; } ///< 获取一条记录的总长度（字节）
 
         // 工具方法
         uint32_t get_column_index(const std::string& column_name) const; ///< 根据列名获取列索引
+
+
+        // 新增接口：用于AST执行器集成
+        /**
+         * @brief 检查列是否存在
+         * @param column_name 列名
+         * @return true-列存在, false-列不存在
+         */
+        bool has_column(const std::string& column_name) const;
+
+        /**
+         * @brief 根据列名获取列（常量版本）
+         * @param column_name 列名
+         * @return 列的常量引用
+         * @throw std::runtime_error 如果列不存在
+         */
+        const Column& get_column(const std::string& column_name) const;
+
+        /**
+         * @brief 根据列名获取列（非常量版本）
+         * @param column_name 列名
+         * @return 列的引用
+         * @throw std::runtime_error 如果列不存在
+         */
+        Column& get_column(const std::string& column_name);
+
+        /**
+         * @brief 获取所有列名的列表
+         * @return 列名向量
+         */
+        std::vector<std::string> get_column_names() const;
 
     private:
         std::vector<Column> columns_; ///< 所有列的集合
