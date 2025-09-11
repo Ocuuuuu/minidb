@@ -1,6 +1,3 @@
-//
-// Created by 罗飞燕 on 2025/9/10.
-//
 //定义表的结构模式
 #pragma once
 
