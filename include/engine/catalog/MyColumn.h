@@ -13,7 +13,7 @@ namespace minidb{
      * 表示数据库表中一个列的结构定义，包含列名、数据类型、长度和在记录中的偏移量。
      * 这是模式(Schema)的基本构建块。
      */
-    struct Column {
+    struct MyColumn {
         std::string name;   ///< 列的名称，如 "id", "name", "age"
         TypeId type;        ///< 列的数据类型，如 INTEGER, VARCHAR, BOOLEAN
         uint32_t length;    ///< 列的长度（字节数），如 INTEGER=4, VARCHAR=20
@@ -26,7 +26,7 @@ namespace minidb{
          * @param col_length 数据长度
          * @param col_offset 在记录中的偏移量（默认为0，通常由Schema计算）
          */
-        Column(const std::string& col_name, TypeId col_type,uint32_t col_length, uint32_t col_offset);
+        MyColumn(const std::string& col_name, TypeId col_type,uint32_t col_length, uint32_t col_offset);
 
         /**
          * @brief 修改列名（预留接口，当前未实现）

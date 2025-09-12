@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include "table_info.h"
+#include "compiler/AST.h"
 
 namespace minidb {
 
@@ -76,11 +77,56 @@ namespace minidb {
          */
         uint32_t get_table_count() const { return tables_.size(); }
 
+        // ==================== 新增接口：AST集成 ====================
+        /**
+         * @brief 从AST创建新表
+         * @param create_ast CREATE TABLE语句的AST节点
+         * @return true-创建成功, false-表已存在或创建失败
+         */
+        bool create_table_from_ast(const CreateTableAST& create_ast);
+
+        /**
+         * @brief 验证INSERT语句的AST是否有效
+         * @param insert_ast INSERT语句的AST节点
+         * @return true-语句有效, false-表不存在或列不匹配
+         */
+        bool validate_insert_ast(const InsertAST& insert_ast) const;
+
+        /**
+         * @brief 验证SELECT语句的AST是否有效
+         * @param select_ast SELECT语句的AST节点
+         * @return true-语句有效, false-表不存在或列不存在
+         */
+        bool validate_select_ast(const SelectAST& select_ast) const;
+
+        /**
+         * @brief 获取表的Schema信息（用于AST执行）
+         * @param table_name 表名
+         * @return Schema的共享指针，如果表不存在则返回nullptr
+         */
+        std::shared_ptr<Schema> get_table_schema(const std::string& table_name) const;
+
     private:
         /// 表信息存储容器：表名到TableInfo的映射
         /// 使用unique_ptr智能指针自动管理内存，避免内存泄漏
         /// unordered_map提供O(1)时间复杂度的查找操作
         std::unordered_map<std::string, std::unique_ptr<TableInfo>> tables_;
+
+        // ==================== 新增私有方法 ====================
+        /**
+         * @brief 将AST中的字符串类型转换为TypeId枚举
+         * @param type_str 类型字符串（如 "INT", "STRING", "BOOLEAN"）
+         * @return 对应的TypeId枚举值
+         * @throw std::invalid_argument 如果类型字符串无效
+         */
+        TypeId convert_ast_type_to_typeid(const std::string& type_str) const;
+
+        /**
+         * @brief 计算VARCHAR类型的合适长度
+         * @param type_str 类型字符串（如 "STRING" 或 "VARCHAR(255)"）
+         * @return 计算得到的长度
+         */
+        uint32_t calculate_varchar_length(const std::string& type_str) const;
     };
 
 } // namespace minidb
