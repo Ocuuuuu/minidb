@@ -18,7 +18,8 @@ if(TEST_SOURCES)
             unit_tests/test_schema.cpp
             unit_tests/test_table_info.cpp
             unit_tests/test_catalog_manager.cpp
-            integration_tests/test_catalog.cpp)
+            integration_tests/test_catalog.cpp
+    )
 
     # 链接主库
     target_link_libraries(minidb_tests minidb_lib)

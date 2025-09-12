@@ -1,4 +1,4 @@
-// ç®¡ç†æ‰€æœ‰è¡¨çš„å…ƒä¿¡æ¯
+// ¹ÜÀíËùÓĞ±íµÄÔªĞÅÏ¢
 
 #pragma once
 
@@ -12,68 +12,68 @@
 namespace minidb {
 
     /**
-     * @brief ç›®å½•ç®¡ç†å™¨ç±»
+     * @brief Ä¿Â¼¹ÜÀíÆ÷Àà
      *
-     * æ•°æ®åº“ç³»ç»Ÿçš„å…ƒæ•°æ®ç®¡ç†ä¸­å¿ƒï¼Œè´Ÿè´£ç®¡ç†æ‰€æœ‰è¡¨çš„åˆ›å»ºã€åˆ é™¤å’ŒæŸ¥è¯¢ã€‚
-     * å…¶ä»–æ¨¡å—é€šè¿‡æ­¤ç±»è·å–è¡¨çš„å…ƒä¿¡æ¯æ¥æ­£ç¡®æ“ä½œæ•°æ®ã€‚
-     * é‡‡ç”¨å•ä¾‹æ¨¡å¼è®¾è®¡ï¼Œç¡®ä¿å…ƒæ•°æ®çš„ä¸€è‡´æ€§ã€‚
+     * Êı¾İ¿âÏµÍ³µÄÔªÊı¾İ¹ÜÀíÖĞĞÄ£¬¸ºÔğ¹ÜÀíËùÓĞ±íµÄ´´½¨¡¢É¾³ıºÍ²éÑ¯¡£
+     * ÆäËûÄ£¿éÍ¨¹ı´ËÀà»ñÈ¡±íµÄÔªĞÅÏ¢À´ÕıÈ·²Ù×÷Êı¾İ¡£
+     * ²ÉÓÃµ¥ÀıÄ£Ê½Éè¼Æ£¬È·±£ÔªÊı¾İµÄÒ»ÖÂĞÔ¡£
      */
     class CatalogManager {
     public:
-        CatalogManager() = default;  ///< é»˜è®¤æ„é€ å‡½æ•°
-        ~CatalogManager() = default; ///< é»˜è®¤ææ„å‡½æ•°
+        CatalogManager() = default;  ///< Ä¬ÈÏ¹¹Ôìº¯Êı
+        ~CatalogManager() = default; ///< Ä¬ÈÏÎö¹¹º¯Êı
 
-        // è¡¨ç®¡ç†æ¥å£
+        // ±í¹ÜÀí½Ó¿Ú
         /**
-         * @brief åˆ›å»ºæ–°è¡¨
-         * @param table_name è¡¨åï¼Œå¿…é¡»å”¯ä¸€
-         * @param schema è¡¨çš„æ¨¡å¼å®šä¹‰ï¼ˆåˆ—ä¿¡æ¯ã€çº¦æŸç­‰ï¼‰
-         * @return true-åˆ›å»ºæˆåŠŸ, false-è¡¨å·²å­˜åœ¨æˆ–åˆ›å»ºå¤±è´¥
+         * @brief ´´½¨ĞÂ±í
+         * @param table_name ±íÃû£¬±ØĞëÎ¨Ò»
+         * @param schema ±íµÄÄ£Ê½¶¨Òå£¨ÁĞĞÅÏ¢¡¢Ô¼ÊøµÈ£©
+         * @return true-´´½¨³É¹¦, false-±íÒÑ´æÔÚ»ò´´½¨Ê§°Ü
          */
         bool create_table(const std::string& table_name, const Schema& schema);
 
         /**
-         * @brief åˆ é™¤è¡¨
-         * @param table_name è¦åˆ é™¤çš„è¡¨å
-         * @return true-åˆ é™¤æˆåŠŸ, false-è¡¨ä¸å­˜åœ¨
+         * @brief É¾³ı±í
+         * @param table_name ÒªÉ¾³ıµÄ±íÃû
+         * @return true-É¾³ı³É¹¦, false-±í²»´æÔÚ
          */
         bool drop_table(const std::string& table_name);
 
         /**
-         * @brief æ£€æŸ¥è¡¨æ˜¯å¦å­˜åœ¨
-         * @param table_name è¦æ£€æŸ¥çš„è¡¨å
-         * @return true-è¡¨å­˜åœ¨, false-è¡¨ä¸å­˜åœ¨
+         * @brief ¼ì²é±íÊÇ·ñ´æÔÚ
+         * @param table_name Òª¼ì²éµÄ±íÃû
+         * @return true-±í´æÔÚ, false-±í²»´æÔÚ
          */
         bool table_exists(const std::string& table_name) const;
 
-        // è¡¨æŸ¥è¯¢æ¥å£ï¼ˆæ ¸å¿ƒæ¥å£ï¼‰
+        // ±í²éÑ¯½Ó¿Ú£¨ºËĞÄ½Ó¿Ú£©
         /**
-         * @brief è·å–è¡¨ä¿¡æ¯ï¼ˆéå¸¸é‡ç‰ˆæœ¬ï¼‰
-         * @param table_name è¡¨å
-         * @return TableInfoæŒ‡é’ˆï¼Œå¦‚æœè¡¨ä¸å­˜åœ¨åˆ™è¿”å›nullptr
-         * @note å…è®¸é€šè¿‡è¿”å›çš„æŒ‡é’ˆä¿®æ”¹è¡¨ä¿¡æ¯ï¼Œä½¿ç”¨æ—¶éœ€è°¨æ…
+         * @brief »ñÈ¡±íĞÅÏ¢£¨·Ç³£Á¿°æ±¾£©
+         * @param table_name ±íÃû
+         * @return TableInfoÖ¸Õë£¬Èç¹û±í²»´æÔÚÔò·µ»Ønullptr
+         * @note ÔÊĞíÍ¨¹ı·µ»ØµÄÖ¸ÕëĞŞ¸Ä±íĞÅÏ¢£¬Ê¹ÓÃÊ±Ğè½÷É÷
          */
         TableInfo* get_table(const std::string& table_name);
 
         /**
-         * @brief è·å–è¡¨ä¿¡æ¯ï¼ˆå¸¸é‡ç‰ˆæœ¬ï¼‰
-         * @param table_name è¡¨å
-         * @return TableInfoå¸¸é‡æŒ‡é’ˆï¼Œå¦‚æœè¡¨ä¸å­˜åœ¨åˆ™è¿”å›nullptr
-         * @note ä¿è¯è¿”å›çš„è¡¨ä¿¡æ¯ä¸ä¼šè¢«ä¿®æ”¹ï¼Œç”¨äºåªè¯»æ“ä½œ
+         * @brief »ñÈ¡±íĞÅÏ¢£¨³£Á¿°æ±¾£©
+         * @param table_name ±íÃû
+         * @return TableInfo³£Á¿Ö¸Õë£¬Èç¹û±í²»´æÔÚÔò·µ»Ønullptr
+         * @note ±£Ö¤·µ»ØµÄ±íĞÅÏ¢²»»á±»ĞŞ¸Ä£¬ÓÃÓÚÖ»¶Á²Ù×÷
          */
         const TableInfo* get_table(const std::string& table_name) const;
 
-        // è¾…åŠ©æ¥å£
+        // ¸¨Öú½Ó¿Ú
         /**
-         * @brief è·å–æ‰€æœ‰è¡¨åçš„åˆ—è¡¨
-         * @return æŒ‰å­—æ¯é¡ºåºæ’åºçš„è¡¨åå‘é‡
-         * @note ä¸»è¦ç”¨äºæ˜¾ç¤ºæ•°æ®åº“ä¸­çš„æ‰€æœ‰è¡¨
+         * @brief »ñÈ¡ËùÓĞ±íÃûµÄÁĞ±í
+         * @return °´×ÖÄ¸Ë³ĞòÅÅĞòµÄ±íÃûÏòÁ¿
+         * @note Ö÷ÒªÓÃÓÚÏÔÊ¾Êı¾İ¿âÖĞµÄËùÓĞ±í
          */
         std::vector<std::string> get_table_names() const;
 
         /**
-         * @brief è·å–è¡¨æ•°é‡
-         * @return å½“å‰ç®¡ç†çš„è¡¨æ€»æ•°
+         * @brief »ñÈ¡±íÊıÁ¿
+         * @return µ±Ç°¹ÜÀíµÄ±í×ÜÊı
          */
         uint32_t get_table_count() const { return tables_.size(); }
 
@@ -107,9 +107,9 @@ namespace minidb {
         std::shared_ptr<Schema> get_table_schema(const std::string& table_name) const;
 
     private:
-        /// è¡¨ä¿¡æ¯å­˜å‚¨å®¹å™¨ï¼šè¡¨ååˆ°TableInfoçš„æ˜ å°„
-        /// ä½¿ç”¨unique_ptræ™ºèƒ½æŒ‡é’ˆè‡ªåŠ¨ç®¡ç†å†…å­˜ï¼Œé¿å…å†…å­˜æ³„æ¼
-        /// unordered_mapæä¾›O(1)æ—¶é—´å¤æ‚åº¦çš„æŸ¥æ‰¾æ“ä½œ
+        /// ±íĞÅÏ¢´æ´¢ÈİÆ÷£º±íÃûµ½TableInfoµÄÓ³Éä
+        /// Ê¹ÓÃunique_ptrÖÇÄÜÖ¸Õë×Ô¶¯¹ÜÀíÄÚ´æ£¬±ÜÃâÄÚ´æĞ¹Â©
+        /// unordered_mapÌá¹©O(1)Ê±¼ä¸´ÔÓ¶ÈµÄ²éÕÒ²Ù×÷
         std::unordered_map<std::string, std::unique_ptr<TableInfo>> tables_;
 
         // ==================== æ–°å¢ç§æœ‰æ–¹æ³• ====================

@@ -12,8 +12,7 @@ file(GLOB_RECURSE SOURCES "src/*.cpp")
 include_directories(include)
 
 # 创建主可执行文件
-add_executable(minidb ${SOURCES}
-        include/compiler/AST.h)
+add_executable(minidb ${SOURCES})
 
 
 # 创建库目标用于测试

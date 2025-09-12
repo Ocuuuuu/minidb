@@ -56,10 +56,18 @@ void Parser::initPredictTable() {
     predictTable["ColumnList'|,"] = {COMMA, "Column", "ColumnList'"};   // 逗号后接新列
     predictTable["ColumnList'|)"] = {};                                 // 右括号结束（空产生式）
 
-    // 5. 列定义规则：Column → 列名 类型关键字（IDENTIFIER → 列名，KEYWORD(TYPE) → 类型）
+    // 5. 列定义规则：Column → 列名 类型关键字（扩展支持VARCHAR/INTEGER）
     predictTable["Column|IDENTIFIER"] = {"IDENTIFIER", "KEYWORD(TYPE)"};
-    predictTable["KEYWORD(TYPE)|INT"] = {"KEYWORD(INT)"};               // 类型为INT
-    predictTable["KEYWORD(TYPE)|STRING"] = {"KEYWORD(STRING)"};         // 类型为STRING
+    // 扩展类型关键字匹配：支持INT/INTEGER、STRING/VARCHAR（兼容大小写）
+    predictTable["KEYWORD(TYPE)|INT"] = {"KEYWORD(INT)"};
+    predictTable["KEYWORD(TYPE)|INTEGER"] = {"KEYWORD(INTEGER)"};  // 新增INTEGER
+    predictTable["KEYWORD(TYPE)|STRING"] = {"KEYWORD(STRING)"};
+    predictTable["KEYWORD(TYPE)|VARCHAR"] = {"KEYWORD(VARCHAR)"};  // 新增VARCHAR
+    // 兼容小写类型
+    predictTable["KEYWORD(TYPE)|int"] = {"KEYWORD(int)"};
+    predictTable["KEYWORD(TYPE)|integer"] = {"KEYWORD(integer)"};
+    predictTable["KEYWORD(TYPE)|string"] = {"KEYWORD(string)"};
+    predictTable["KEYWORD(TYPE)|varchar"] = {"KEYWORD(varchar)"};
 
     // 6. INSERT语句规则：Insert → INSERT INTO 表名 VALUES ( 值列表 ) ;
     predictTable["Insert|INSERT"] = {
@@ -211,7 +219,10 @@ void Parser::match(const string& expectedValue) {
 
     //2. 特殊匹配：类型关键字（INT/STRING）匹配"KEYWORD(TYPE)"
     bool isTypeMatch = (expectedValue == "KEYWORD(TYPE)" &&
-                      (currentTokenKey == "KEYWORD(INT)" || currentTokenKey == "KEYWORD(STRING)"));
+                      (currentTokenKey == "KEYWORD(INT)"      || currentTokenKey == "KEYWORD(integer)" ||
+                       currentTokenKey == "KEYWORD(INTEGER)"  || currentTokenKey == "KEYWORD(int)" ||
+                       currentTokenKey == "KEYWORD(STRING)"   || currentTokenKey == "KEYWORD(string)" ||
+                       currentTokenKey == "KEYWORD(VARCHAR)"  || currentTokenKey == "KEYWORD(varchar)"));
     if (!isTypeMatch && currentTokenKey != expectedValue) {
         stringstream errMsg;
         errMsg << "语法错误：预期'" << expectedValue << "', 实际'" << currentTokenKey
