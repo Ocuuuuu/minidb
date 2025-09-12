@@ -33,4 +33,5 @@ namespace minidb {
             : DatabaseException("Null value: " + msg) {}
     };
 
+
 } // namespace minidb

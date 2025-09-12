@@ -5,6 +5,9 @@
 
 namespace minidb {
 
+    //定义页面ID类型
+    using PageID=int32_t;
+
     // 支持的数据库类型枚举
     enum class TypeId {
         INVALID,    // 无效类型
@@ -18,7 +21,7 @@ namespace minidb {
 
     // 记录标识符 (Record Identifier) - 用于定位磁盘上的记录
     struct RID {
-        int32_t page_id{-1};     // 页号，-1表示无效
+        PageID page_id{-1};     // 页号，-1表示无效
         int32_t slot_num{-1};    // 槽位号，-1表示无效
 
         // 重载比较运算符
