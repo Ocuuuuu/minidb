@@ -4,6 +4,7 @@
 #include <string>
 
 namespace minidb {
+    using PageID=int32_t;
 
     //定义页面ID类型
     using PageID=int32_t;

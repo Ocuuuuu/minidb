@@ -1,5 +1,5 @@
-#include "./common/Value.h"
-#include "./common/Types.h"
+#include "../include/common/Value.h"
+#include "../include/common/Types.h"
 #include <sstream>
 #include <stdexcept>
 

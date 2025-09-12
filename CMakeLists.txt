@@ -1,47 +1,32 @@
-cmake_minimum_required(VERSION 4.0)
+cmake_minimum_required(VERSION 3.20)
 project(minidb)
 
 set(CMAKE_CXX_STANDARD 20)
+# 强制要求编译器必须支持指定的C++标准
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-include_directories(include)
-
-#add_executable() 中只应该包含 .cpp 源文件，头文件是通过 include_directories() 让编译器找到的。（要修改）
-add_executable(minidb src/main.cpp
-        src/compiler/Lexer.cpp
-        include/compiler/Lexer.h
-        src/compiler/Parser.cpp
-        include/compiler/Parser.h
-        src/compiler/SemanticAnalyzer.cpp
-        include/compiler/SemanticAnalyzer.h
-        src/compiler/QueryPlanner.cpp
-        include/compiler/QueryPlanner.h
-        src/storage/Page.cpp
-        include/storage/Page.h
-        src/storage/BufferManager.cpp
-        include/storage/BufferManager.h
-        src/storage/DiskManager.cpp
-        include/storage/DiskManager.h
-        src/storage/FileManager.cpp
-        include/storage/FileManager.h
-        src/engine/ExecutionEngine.cpp
-        include/engine/ExecutionEngine.h
-        src/engine/Operators.cpp
-        include/engine/Operators.h
-        src/engine/Catalog.cpp
-        include/engine/Catalog.h
-        src/engine/Table.cpp
-        include/engine/Table.h
-        include/common/Types.h
-        include/common/Constants.h
-        include/common/Exception.h
-        include/common/Value.h
-        include/common/Tuple.h
-        src/common/Value.cpp
-        src/common/Tuple.cpp
-)
-
-# 递归地找到src目录下所有的cpp文件（自动查找），或者可以像上面那样显示的提出
+# 使用GLOB自动查找所有源文件（推荐，更简洁）
 file(GLOB_RECURSE SOURCES "src/*.cpp")
 
-## 创建可执行文件
-#add_executable(${PROJECT_NAME} main.cpp ${SOURCES})
+# 包含头文件目录
+include_directories(include)
+
+# 创建主可执行文件
+add_executable(minidb ${SOURCES})
+
+
+# 创建库目标用于测试
+add_library(minidb_lib ${SOURCES})
+target_include_directories(minidb_lib PUBLIC include)
+
+# 启用测试
+enable_testing()
+
+# 包含测试目录
+add_subdirectory(tests)
+
+# 编译选项
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(minidb PRIVATE -Wall -Wextra)
+    target_compile_options(minidb_lib PRIVATE -Wall -Wextra)
+endif()
