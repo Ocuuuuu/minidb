@@ -1,4 +1,4 @@
-#include "../include/engine/catalog/column.h"
+#include "../include/engine/catalog/MyColumn.h"
 #include <stdexcept> //抛出异常
 
 namespace minidb {
@@ -8,7 +8,7 @@ namespace minidb {
  *
  * 初始化列的元数据信息。偏移量通常由Schema类在构建时统一计算。
  */
-Column::Column(const std::string& col_name, TypeId col_type,
+MyColumn::MyColumn(const std::string& col_name, TypeId col_type,
                uint32_t col_length, uint32_t col_offset)
     : name(col_name), type(col_type), length(col_length), offset(col_offset) {
 
@@ -69,17 +69,17 @@ Column::Column(const std::string& col_name, TypeId col_type,
 }
 
     // 预留接口：目前抛出异常，未来可以实现
-void Column::set_name(const std::string& new_name) {
+void MyColumn::set_name(const std::string& new_name) {
     throw std::runtime_error("Column modification is not supported in current version");
     // name = new_name; // 未来取消注释即可实现
 }
 
-void Column::set_type(TypeId new_type) {
+void MyColumn::set_type(TypeId new_type) {
     throw std::runtime_error("Column modification is not supported in current version");
     // type = new_type;
 }
 
-void Column::set_length(uint32_t new_length) {
+void MyColumn::set_length(uint32_t new_length) {
     throw std::runtime_error("Column modification is not supported in current version");
     // length = new_length;
 }

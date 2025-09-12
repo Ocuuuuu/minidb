@@ -5,11 +5,11 @@
 TEST_CASE("Schema class functionality", "[schema][catalog][unit]")
 {
     // 创建测试用的列定义
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0},
-        minidb::Column{"name", minidb::TypeId::VARCHAR, 50, 0},
-        minidb::Column{"age", minidb::TypeId::INTEGER, 4, 0},
-        minidb::Column{"is_active", minidb::TypeId::BOOLEAN, 1, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
+        minidb::MyColumn{"name", minidb::TypeId::VARCHAR, 50, 0},
+        minidb::MyColumn{"age", minidb::TypeId::INTEGER, 4, 0},
+        minidb::MyColumn{"is_active", minidb::TypeId::BOOLEAN, 1, 0}
     };
 
     minidb::Schema schema(columns);
@@ -125,7 +125,7 @@ TEST_CASE("Schema class functionality", "[schema][catalog][unit]")
 TEST_CASE("Schema edge cases", "[schema][edge][unit]")
 {
     SECTION("Empty columns list") {
-        std::vector<minidb::Column> empty_columns;
+        std::vector<minidb::MyColumn> empty_columns;
         minidb::Schema schema(empty_columns);
 
         REQUIRE(schema.get_column_count() == 0);
@@ -142,8 +142,8 @@ TEST_CASE("Schema edge cases", "[schema][edge][unit]")
     }
 
     SECTION("Single column schema") {
-        std::vector<minidb::Column> single_column = {
-            minidb::Column{"single", minidb::TypeId::INTEGER, 4, 0}
+        std::vector<minidb::MyColumn> single_column = {
+            minidb::MyColumn{"single", minidb::TypeId::INTEGER, 4, 0}
         };
 
         minidb::Schema schema(single_column);
@@ -169,10 +169,10 @@ TEST_CASE("Schema edge cases", "[schema][edge][unit]")
 TEST_CASE("Schema with all TypeId types", "[schema][types][unit]")
 {
     SECTION("All supported TypeId types") {
-        std::vector<minidb::Column> all_types_columns = {
-            minidb::Column{"bool_col", minidb::TypeId::BOOLEAN, 1, 0},
-            minidb::Column{"int_col", minidb::TypeId::INTEGER, 4, 0},
-            minidb::Column{"varchar_col", minidb::TypeId::VARCHAR, 100, 0}
+        std::vector<minidb::MyColumn> all_types_columns = {
+            minidb::MyColumn{"bool_col", minidb::TypeId::BOOLEAN, 1, 0},
+            minidb::MyColumn{"int_col", minidb::TypeId::INTEGER, 4, 0},
+            minidb::MyColumn{"varchar_col", minidb::TypeId::VARCHAR, 100, 0}
         };
 
         minidb::Schema schema(all_types_columns);
@@ -198,9 +198,9 @@ TEST_CASE("Schema with all TypeId types", "[schema][types][unit]")
 // 新增测试：方法之间的协调性
 TEST_CASE("Schema method consistency", "[schema][consistency][unit]")
 {
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0},
-        minidb::Column{"name", minidb::TypeId::VARCHAR, 50, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
+        minidb::MyColumn{"name", minidb::TypeId::VARCHAR, 50, 0}
     };
 
     minidb::Schema schema(columns);
@@ -238,57 +238,54 @@ TEST_CASE("Column validation tests", "[schema][validation][unit]")
 {
     SECTION("Invalid column name") {
         // 空列名
-        REQUIRE_THROWS_AS(minidb::Column("", minidb::TypeId::INTEGER, 4, 0),
+        REQUIRE_THROWS_AS(minidb::MyColumn("", minidb::TypeId::INTEGER, 4, 0),
                          std::invalid_argument);
 
         // 包含空格的列名
-        REQUIRE_THROWS_AS(minidb::Column("first name", minidb::TypeId::INTEGER, 4, 0),
+        REQUIRE_THROWS_AS(minidb::MyColumn("first name", minidb::TypeId::INTEGER, 4, 0),
                          std::invalid_argument);
     }
 
     SECTION("Invalid column type") {
         // INVALID 类型
-        REQUIRE_THROWS_AS(minidb::Column("test", minidb::TypeId::INVALID, 4, 0),
+        REQUIRE_THROWS_AS(minidb::MyColumn("test", minidb::TypeId::INVALID, 4, 0),
                          std::invalid_argument);
     }
 
     SECTION("Invalid column length") {
         // 长度为0
-        REQUIRE_THROWS_AS(minidb::Column("test", minidb::TypeId::INTEGER, 0, 0),
+        REQUIRE_THROWS_AS(minidb::MyColumn("test", minidb::TypeId::INTEGER, 0, 0),
                          std::invalid_argument);
 
         // BOOLEAN 长度不为1
-        REQUIRE_THROWS_AS(minidb::Column("test", minidb::TypeId::BOOLEAN, 4, 0),
+        REQUIRE_THROWS_AS(minidb::MyColumn("test", minidb::TypeId::BOOLEAN, 4, 0),
                          std::invalid_argument);
 
         // INTEGER 长度无效
-        REQUIRE_THROWS_AS(minidb::Column("test", minidb::TypeId::INTEGER, 8, 0),
+        REQUIRE_THROWS_AS(minidb::MyColumn("test", minidb::TypeId::INTEGER, 8, 0),
                          std::invalid_argument);
 
         // VARCHAR 长度过大
-        REQUIRE_THROWS_AS(minidb::Column("test", minidb::TypeId::VARCHAR, 70000, 0),
+        REQUIRE_THROWS_AS(minidb::MyColumn("test", minidb::TypeId::VARCHAR, 70000, 0),
                          std::invalid_argument);
     }
 
     SECTION("Valid integer lengths") {
         // 测试所有有效的 INTEGER 长度
-        REQUIRE_NOTHROW(minidb::Column("byte", minidb::TypeId::INTEGER, 1, 0));
-        REQUIRE_NOTHROW(minidb::Column("short", minidb::TypeId::INTEGER, 2, 0));
-        REQUIRE_NOTHROW(minidb::Column("int", minidb::TypeId::INTEGER, 4, 0));
+        REQUIRE_NOTHROW(minidb::MyColumn("byte", minidb::TypeId::INTEGER, 1, 0));
+        REQUIRE_NOTHROW(minidb::MyColumn("short", minidb::TypeId::INTEGER, 2, 0));
+        REQUIRE_NOTHROW(minidb::MyColumn("int", minidb::TypeId::INTEGER, 4, 0));
     }
 }
 
-TEST_CASE("Schema construction with invalid columns", "[schema][error][unit]")
+TEST_CASE("Simple exception test", "[debug]")
 {
-    SECTION("Schema with invalid column should throw") {
-        std::vector<minidb::Column> invalid_columns = {
-            minidb::Column{"valid", minidb::TypeId::INTEGER, 4, 0},
-            minidb::Column{"invalid", minidb::TypeId::INVALID, 4, 0} // 这个会抛出异常
-        };
+    // 测试标准异常是否能被正确捕获
+    REQUIRE_THROWS_AS(throw std::invalid_argument("test"), std::invalid_argument);
 
-        // 由于 Column 构造函数会立即验证，这个测试可能无法到达 Schema 构造函数
-        // 但我们可以测试 Column 构造的异常
-        REQUIRE_THROWS_AS(minidb::Column("invalid", minidb::TypeId::INVALID, 4, 0),
-                         std::invalid_argument);
-    }
+    // 测试你的具体异常
+    REQUIRE_THROWS_AS(
+        minidb::MyColumn("test", minidb::TypeId::INVALID, 4, 0),
+        std::invalid_argument
+    );
 }

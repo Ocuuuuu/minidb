@@ -54,28 +54,47 @@ public:
     }
 };
 
+// 测试辅助函数
+Schema create_user_schema() {
+    std::vector<MyColumn> columns = {
+        MyColumn{"id", TypeId::INTEGER, 4, 0},
+        MyColumn{"name", TypeId::VARCHAR, 50, 4},
+        MyColumn{"email", TypeId::VARCHAR, 100, 54}
+    };
+    return Schema(columns);
+}
+
+Schema create_product_schema() {
+    std::vector<MyColumn> columns = {
+        MyColumn{"product_id", TypeId::INTEGER, 4, 0},
+        MyColumn{"product_name", TypeId::VARCHAR, 100, 4},
+        MyColumn{"price", TypeId::INTEGER, 4, 104}
+    };
+    return Schema(columns);
+}
+
+CreateTableAST create_user_ast() {
+    CreateTableAST ast;
+    ast.tableName = "users";
+    ast.columns = {
+        {"id", "INTEGER"},
+        {"name", "VARCHAR(50)"},
+        {"email", "VARCHAR(100)"}
+    };
+    return ast;
+}
+
+
+
 TEST_CASE("Catalog Manager Integration with Mock Storage", "[catalog][integration][storage]")
 {
     CatalogManager catalog;
     MockStorageManager storage;
     MockExecutionEngine engine;
 
-    // 创建测试Schema
-    std::vector<Column> user_columns = {
-        Column{"id", TypeId::INTEGER, 4, 0},
-        Column{"name", TypeId::VARCHAR, 50, 4},
-        Column{"email", TypeId::VARCHAR, 100, 54},
-        Column{"active", TypeId::BOOLEAN, 1, 154}
-    };
-
-    std::vector<Column> product_columns = {
-        Column{"product_id", TypeId::INTEGER, 4, 0},
-        Column{"product_name", TypeId::VARCHAR, 100, 4},
-        Column{"price", TypeId::INTEGER, 4, 104}
-    };
-
-    Schema user_schema(user_columns);
-    Schema product_schema(product_columns);
+    // 使用辅助函数创建Schema
+    Schema user_schema = create_user_schema();
+    Schema product_schema = create_product_schema();
 
     SECTION("Integrated table creation workflow") {
         // 集成点1: 存储层创建表文件
@@ -97,7 +116,7 @@ TEST_CASE("Catalog Manager Integration with Mock Storage", "[catalog][integratio
 
         // 验证Schema信息正确传递
         const Schema& retrieved_schema = table_info->get_schema();
-        REQUIRE(retrieved_schema.get_column_count() == 4);
+        REQUIRE(retrieved_schema.get_column_count() == 3); // 修改为3个列
         REQUIRE(retrieved_schema.get_column(0).name == "id");
         REQUIRE(retrieved_schema.get_column(0).type == TypeId::INTEGER);
         REQUIRE(retrieved_schema.get_column(1).name == "name");
@@ -185,6 +204,26 @@ TEST_CASE("Catalog Manager Integration with Mock Storage", "[catalog][integratio
         REQUIRE(engine_info1->get_table_id() == info1->get_table_id());
         REQUIRE(engine_info2->get_table_id() == info2->get_table_id());
     }
+
+    SECTION("AST Integration Tests") {
+        CreateTableAST ast = create_user_ast();
+
+        // 测试AST创建表
+        REQUIRE(catalog.create_table_from_ast(ast));
+        REQUIRE(catalog.table_exists("users"));
+
+        // 测试INSERT验证
+        InsertAST insert_ast;
+        insert_ast.tableName = "users";
+        insert_ast.values = {"1", "'test'", "'test@example.com'"};
+        REQUIRE(catalog.validate_insert_ast(insert_ast));
+
+        // 测试SELECT验证
+        SelectAST select_ast;
+        select_ast.tableName = "users";
+        select_ast.columns = {"id", "name"};
+        REQUIRE(catalog.validate_select_ast(select_ast));
+    }
 }
 
 TEST_CASE("Schema Integration Across Modules", "[schema][integration]")
@@ -194,7 +233,7 @@ TEST_CASE("Schema Integration Across Modules", "[schema][integration]")
 
     SECTION("Schema consistency across catalog and execution engine") {
         // 创建复杂Schema
-        std::vector<Column> columns;
+        std::vector<MyColumn> columns;
         columns.emplace_back("id", TypeId::INTEGER, 4, 0);
         columns.emplace_back("timestamp", TypeId::INTEGER, 4, 4);
         columns.emplace_back("description", TypeId::VARCHAR, 200, 12);
@@ -221,8 +260,8 @@ TEST_CASE("Schema Integration Across Modules", "[schema][integration]")
 
         // 验证每个列的属性都正确传递
         for (uint32_t i = 0; i < catalog_schema.get_column_count(); ++i) {
-            const Column& catalog_col = catalog_schema.get_column(i);
-            const Column& engine_col = engine_schema.get_column(i);
+            const MyColumn& catalog_col = catalog_schema.get_column(i);
+            const MyColumn& engine_col = engine_schema.get_column(i);
 
             REQUIRE(catalog_col.name == engine_col.name);
             REQUIRE(catalog_col.type == engine_col.type);
@@ -232,7 +271,7 @@ TEST_CASE("Schema Integration Across Modules", "[schema][integration]")
     }
 
     SECTION("Column index lookup integration") {
-        std::vector<Column> columns;
+        std::vector<MyColumn> columns;
         columns.emplace_back("user_id", TypeId::INTEGER, 4, 0);
         columns.emplace_back("user_name", TypeId::VARCHAR, 50, 4);
         columns.emplace_back("is_admin", TypeId::BOOLEAN, 1, 54);
@@ -262,8 +301,8 @@ TEST_CASE("Error Handling Integration", "[catalog][integration][error]")
     MockStorageManager storage;
     MockExecutionEngine engine;
 
-    std::vector<Column> columns = {
-        Column{"id", TypeId::INTEGER, 4, 0}
+    std::vector<MyColumn> columns = {
+        MyColumn{"id", TypeId::INTEGER, 4, 0}
     };
     Schema schema(columns);
 

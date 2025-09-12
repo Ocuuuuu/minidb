@@ -1,16 +1,16 @@
 #include <../tests/catch2/catch_amalgamated.hpp>
 #include <engine/catalog/table_info.h>
 #include <engine/catalog/schema.h>
-#include <engine/catalog/column.h>
+#include <engine/catalog/MyColumn.h>
 #include <stdexcept>
 
 TEST_CASE("TableInfo class functionality", "[tableinfo][catalog][unit]") 
 {
     // 创建测试用的列定义
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0},
-        minidb::Column{"name", minidb::TypeId::VARCHAR, 50, 0},
-        minidb::Column{"age", minidb::TypeId::INTEGER, 4, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
+        minidb::MyColumn{"name", minidb::TypeId::VARCHAR, 50, 0},
+        minidb::MyColumn{"age", minidb::TypeId::INTEGER, 4, 0}
     };
 
     minidb::Schema schema(columns);
@@ -65,8 +65,8 @@ TEST_CASE("TableInfo class functionality", "[tableinfo][catalog][unit]")
 
 TEST_CASE("TableInfo unique ID generation", "[tableinfo][id][unit]")
 {
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     minidb::Schema schema(columns);
 
@@ -91,8 +91,8 @@ TEST_CASE("TableInfo unique ID generation", "[tableinfo][id][unit]")
 
 TEST_CASE("TableInfo edge cases", "[tableinfo][edge][unit]")
 {
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     minidb::Schema schema(columns);
 
@@ -104,7 +104,7 @@ TEST_CASE("TableInfo edge cases", "[tableinfo][edge][unit]")
     }
 
     SECTION("Table with empty schema") {
-        std::vector<minidb::Column> empty_columns;
+        std::vector<minidb::MyColumn> empty_columns;
         minidb::Schema empty_schema(empty_columns);
         
         minidb::TableInfo table("empty_table", empty_schema);
@@ -116,8 +116,8 @@ TEST_CASE("TableInfo edge cases", "[tableinfo][edge][unit]")
     }
 
     SECTION("Table with single column schema") {
-        std::vector<minidb::Column> single_column = {
-            minidb::Column{"single", minidb::TypeId::INTEGER, 4, 0}
+        std::vector<minidb::MyColumn> single_column = {
+            minidb::MyColumn{"single", minidb::TypeId::INTEGER, 4, 0}
         };
         minidb::Schema single_schema(single_column);
         
@@ -132,10 +132,10 @@ TEST_CASE("TableInfo edge cases", "[tableinfo][edge][unit]")
 TEST_CASE("TableInfo schema integrity", "[tableinfo][schema][unit]")
 {
     SECTION("Schema content preservation") {
-        std::vector<minidb::Column> columns = {
-            minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0},
-            minidb::Column{"name", minidb::TypeId::VARCHAR, 50, 0},
-            minidb::Column{"age", minidb::TypeId::INTEGER, 4, 0}
+        std::vector<minidb::MyColumn> columns = {
+            minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
+            minidb::MyColumn{"name", minidb::TypeId::VARCHAR, 50, 0},
+            minidb::MyColumn{"age", minidb::TypeId::INTEGER, 4, 0}
         };
         minidb::Schema original_schema(columns);
         
@@ -160,10 +160,10 @@ TEST_CASE("TableInfo schema integrity", "[tableinfo][schema][unit]")
     }
 
     SECTION("Schema offset calculation verification") {
-        std::vector<minidb::Column> columns = {
-            minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0},
-            minidb::Column{"name", minidb::TypeId::VARCHAR, 50, 0},
-            minidb::Column{"age", minidb::TypeId::INTEGER, 4, 0}
+        std::vector<minidb::MyColumn> columns = {
+            minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
+            minidb::MyColumn{"name", minidb::TypeId::VARCHAR, 50, 0},
+            minidb::MyColumn{"age", minidb::TypeId::INTEGER, 4, 0}
         };
         minidb::Schema schema(columns);
         
@@ -179,8 +179,8 @@ TEST_CASE("TableInfo schema integrity", "[tableinfo][schema][unit]")
 
 TEST_CASE("TableInfo ID generation consistency", "[tableinfo][id][consistency][unit]")
 {
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     minidb::Schema schema(columns);
 

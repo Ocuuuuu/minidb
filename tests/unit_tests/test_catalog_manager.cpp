@@ -9,9 +9,9 @@ TEST_CASE("CatalogManager basic functionality", "[catalog][manager][unit]")
     minidb::CatalogManager catalog;
     
     // 创建测试用的列定义
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0},
-        minidb::Column{"name", minidb::TypeId::VARCHAR, 50, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
+        minidb::MyColumn{"name", minidb::TypeId::VARCHAR, 50, 0}
     };
     
     minidb::Schema schema(columns);
@@ -62,9 +62,9 @@ TEST_CASE("CatalogManager table retrieval", "[catalog][retrieval][unit]")
 {
     minidb::CatalogManager catalog;
     
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0},
-        minidb::Column{"name", minidb::TypeId::VARCHAR, 50, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
+        minidb::MyColumn{"name", minidb::TypeId::VARCHAR, 50, 0}
     };
     
     minidb::Schema schema(columns);
@@ -108,8 +108,8 @@ TEST_CASE("CatalogManager table enumeration", "[catalog][enumeration][unit]")
 {
     minidb::CatalogManager catalog;
     
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     
     minidb::Schema schema(columns);
@@ -179,8 +179,8 @@ TEST_CASE("CatalogManager edge cases", "[catalog][edge][unit]")
 {
     minidb::CatalogManager catalog;
     
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     
     minidb::Schema schema(columns);
@@ -233,8 +233,8 @@ TEST_CASE("CatalogManager stress tests", "[catalog][stress][unit]")
 {
     minidb::CatalogManager catalog;
     
-    std::vector<minidb::Column> columns = {
-        minidb::Column{"id", minidb::TypeId::INTEGER, 4, 0}
+    std::vector<minidb::MyColumn> columns = {
+        minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     
     minidb::Schema schema(columns);

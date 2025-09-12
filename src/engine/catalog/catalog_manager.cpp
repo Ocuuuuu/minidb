@@ -111,7 +111,7 @@ namespace minidb {
         }
 
         // 将AST中的列定义转换为Schema所需的Column格式
-        std::vector<Column> schema_columns;
+        std::vector<MyColumn> schema_columns;
         schema_columns.reserve(create_ast.columns.size());
 
         for (const auto& ast_column : create_ast.columns) {

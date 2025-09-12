@@ -11,7 +11,7 @@ namespace minidb {
      *
      * @param columns 列定义向量，包含表中所有列的信息
      */
-    Schema::Schema(const std::vector<Column>& columns) : columns_(columns) {
+    Schema::Schema(const std::vector<MyColumn>& columns) : columns_(columns) {
         // 初始化当前偏移量为0，表示记录的起始位置
         uint32_t current_offset = 0;
 
@@ -39,7 +39,7 @@ namespace minidb {
      * @return const Column& 对应列的常量引用
      * @throw std::out_of_range 如果索引超出有效范围
      */
-    const Column& Schema::get_column(uint32_t column_index) const {
+    const MyColumn& Schema::get_column(uint32_t column_index) const {
         // 检查索引是否在有效范围内
         if (column_index >= columns_.size()) {
             // 索引越界，抛出异常
@@ -60,7 +60,7 @@ namespace minidb {
      * @return const Column& 对应列的常量引用
      * @throw std::out_of_range 如果索引超出有效范围
      */
-    const Column& Schema::get_column(int column_index) const {
+    const MyColumn& Schema::get_column(int column_index) const {
         // 检查索引是否在有效范围内
         if (column_index < 0 || static_cast<uint32_t>(column_index) >= columns_.size()) {
             // 索引越界，抛出异常
@@ -134,7 +134,7 @@ namespace minidb {
      * const Column& id_col = schema.get_column("id");
      * TypeId id_type = id_col.type; // 安全地读取类型信息
      */
-    const Column& Schema::get_column(const std::string& column_name) const {
+    const MyColumn& Schema::get_column(const std::string& column_name) const {
         for (const auto& column : columns_) {
             if (column.name == column_name) {
                 return column;
@@ -156,7 +156,7 @@ namespace minidb {
      * @note 修改列信息可能会影响模式的一致性，建议在受控环境下使用
      * @warning 修改列的偏移量或长度可能会破坏记录布局，需要重新计算模式长度
      */
-    Column& Schema::get_column(const std::string& column_name) {
+    MyColumn& Schema::get_column(const std::string& column_name) {
         for (auto& column : columns_) {
             if (column.name == column_name) {
                 return column;
