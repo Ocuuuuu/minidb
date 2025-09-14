@@ -1,148 +1,123 @@
-//
-// Created by tang_ on 2025/9/9.
-//
+#include "../include/storage/DiskManager.h"
 
-#include "../../include/storage/DiskManager.h"
-#include "storage/DiskManager.h"
 #include <cstring>
 #include <iostream>
 
 namespace minidb {
 namespace storage {
 
-DiskManager::DiskManager(FileManager* file_manager)
+DiskManager::DiskManager(std::shared_ptr<FileManager> file_manager)
     : file_manager_(file_manager) {
-    std::cout << "DiskManager constructor started" << std::endl;
-    if (file_manager_->isOpen()) {
-        std::cout << "File manager is open, reading header" << std::endl;
-        readHeader();
-        std::cout << "Header read, page count: " << page_count_ << std::endl;
-    } else {
-        std::cout << "File manager is not open" << std::endl;
-        page_count_ = 0;
-    }
-    std::cout << "DiskManager constructor completed" << std::endl;
+    // 读取头部信息
+    readHeader();
 }
 
 DiskManager::~DiskManager() {
-    if (file_manager_->isOpen()) {
-        writeHeader();
-    }
+    // 确保头部信息被写入
+    writeHeader();
 }
 
 void DiskManager::readPage(PageID page_id, char* data) {
-    std::lock_guard<std::mutex> lock(io_mutex_);
-
     if (page_id >= page_count_) {
-        throw DatabaseException("Page id out of range: " + std::to_string(page_id));
+        throw DiskException("Page ID out of range: " + std::to_string(page_id));
     }
 
+    std::lock_guard<std::mutex> lock(io_mutex_);
     auto& file = file_manager_->getFileStream();
-    file.seekg(page_id * PAGE_SIZE, std::ios::beg);
-    file.read(data, PAGE_SIZE);
 
-    if (file.fail()) {
-        throw DatabaseException("Failed to read page: " + std::to_string(page_id));
+    // 计算偏移量
+    std::streampos offset = page_id * PAGE_SIZE;
+    file.seekg(offset);
+
+    if (!file.read(data, PAGE_SIZE)) {
+        throw DiskException("Failed to read page: " + std::to_string(page_id));
     }
 }
 
 void DiskManager::writePage(PageID page_id, const char* data) {
-    std::cout << "writePage started for page: " << page_id << std::endl;
-    // 添加调试信息，检查锁的状态
-    std::cout << "Attempting to acquire lock..." << std::endl;
-    std::lock_guard<std::mutex> lock(io_mutex_);
-    std::cout << "Lock acquired successfully" << std::endl;
-
-    std::cout << "writePage lock acquired" << std::endl;
-
     if (page_id >= page_count_) {
-        std::cout << "Page id out of range: " << page_id << std::endl;
-        throw DatabaseException("Page id out of range: " + std::to_string(page_id));
+        throw DiskException("Page ID out of range: " + std::to_string(page_id));
     }
 
-    try {
-        auto& file = file_manager_->getFileStream();
-        std::cout << "Got file stream" << std::endl;
+    std::lock_guard<std::mutex> lock(io_mutex_);
+    auto& file = file_manager_->getFileStream();
 
-        // 检查文件状态
-        if (!file.is_open()) {
-            std::cout << "File is not open" << std::endl;
-            throw DatabaseException("File is not open");
-        }
+    // 计算偏移量
+    std::streampos offset = page_id * PAGE_SIZE;
+    file.seekp(offset);
 
-        if (file.fail()) {
-            std::cout << "File is in fail state" << std::endl;
-            throw DatabaseException("File is in fail state");
-        }
-
-        file.seekp(page_id * PAGE_SIZE, std::ios::beg);
-        std::cout << "Seek to position: " << (page_id * PAGE_SIZE) << std::endl;
-
-        file.write(data, PAGE_SIZE);
-        std::cout << "Data written" << std::endl;
-
-        if (file.fail()) {
-            std::cout << "File write failed" << std::endl;
-            throw DatabaseException("Failed to write page: " + std::to_string(page_id));
-        }
-
-        file.flush();
-        std::cout << "File flushed" << std::endl;
-
-        std::cout << "writePage completed for page: " << page_id << std::endl;
-
-    } catch (const std::exception& e) {
-        std::cout << "Exception in writePage: " << e.what() << std::endl;
-        throw;
+    if (!file.write(data, PAGE_SIZE)) {
+        throw DiskException("Failed to write page: " + std::to_string(page_id));
     }
+
+    // 确保数据被写入
+    file.flush();
 }
 
 PageID DiskManager::allocatePage() {
-    std::cout << "allocatePage started" << std::endl;
+    std::lock_guard<std::mutex> lock(io_mutex_);
 
-    PageID new_page_id;
-    {
-        std::lock_guard<std::mutex> lock(io_mutex_);
-        std::cout << "Lock acquired" << std::endl;
+    PageID allocated_page;
 
-        new_page_id = page_count_;
-        std::cout << "New page ID: " << new_page_id << std::endl;
+    if (free_list_head_ != INVALID_PAGE_ID) {
+        // 从空闲链表分配页面
+        allocated_page = free_list_head_;
 
+        // 读取空闲页面头信息以获取下一个空闲页面
+        char page_data[PAGE_SIZE];
+        readPage(free_list_head_, page_data);
+
+        // 解析下一个空闲页面ID
+        PageID next_free = *reinterpret_cast<PageID*>(page_data);
+        free_list_head_ = next_free;
+    } else {
+        // 分配新页面
+        allocated_page = page_count_;
         page_count_++;
-        std::cout << "Page count increased to: " << page_count_ << std::endl;
-    } // 释放锁
 
-    // 初始化新页面（不在锁的保护范围内）
-    char empty_page[PAGE_SIZE] = {0};
-    writePage(new_page_id, empty_page);
-    std::cout << "Empty page written" << std::endl;
+        // 扩展文件大小
+        auto& file = file_manager_->getFileStream();
+        file.seekp(0, std::ios::end);
+        std::streampos file_size = file.tellp();
 
-    // 更新文件头（writeHeader内部会获取锁）
+        if (file_size < static_cast<std::streampos>((allocated_page + 1) * PAGE_SIZE)) {
+            file.seekp((allocated_page + 1) * PAGE_SIZE - 1);
+            file.put('\0');
+        }
+    }
+
+    // 更新头部信息
     writeHeader();
-    std::cout << "Header updated" << std::endl;
 
-    std::cout << "allocatePage completed, returning: " << new_page_id << std::endl;
-    return new_page_id;
+    return allocated_page;
 }
 
 void DiskManager::deallocatePage(PageID page_id) {
-    std::lock_guard<std::mutex> lock(io_mutex_);
-
-    if (page_id >= page_count_) {
-        throw DatabaseException("Page id out of range: " + std::to_string(page_id));
+    if (page_id >= page_count_ || page_id == 0) {
+        throw DiskException("Invalid page ID for deallocation: " + std::to_string(page_id));
     }
 
-    // 在实际系统中，这里应该将页面标记为空闲并加入空闲列表
-    // 简化版本中，我们只是减少页面计数（这不完全正确，但作为起点）
-    // 注意：这只是一个简化实现，实际系统需要更复杂的管理
+    std::lock_guard<std::mutex> lock(io_mutex_);
 
-    page_count_--;
+    // 将页面添加到空闲链表头部
+    char page_data[PAGE_SIZE];
+    std::memset(page_data, 0, PAGE_SIZE);
+
+    // 将当前空闲链表头存储到被释放的页面中
+    *reinterpret_cast<PageID*>(page_data) = free_list_head_;
+    writePage(page_id, page_data);
+
+    // 更新空闲链表头
+    free_list_head_ = page_id;
+
+    // 更新头部信息
     writeHeader();
 }
 
 void DiskManager::flush() {
     std::lock_guard<std::mutex> lock(io_mutex_);
-    file_manager_->getFileStream().flush();
+    auto& file = file_manager_->getFileStream();
+    file.flush();
 }
 
 PageID DiskManager::getPageCount() const {
@@ -150,67 +125,40 @@ PageID DiskManager::getPageCount() const {
 }
 
 void DiskManager::readHeader() {
-    char header_page[PAGE_SIZE];
+    if (!file_manager_->isOpen()) return;
+
+    std::lock_guard<std::mutex> lock(io_mutex_);
     auto& file = file_manager_->getFileStream();
 
-    file.seekg(0, std::ios::beg);
-    file.read(header_page, PAGE_SIZE);
+    // 检查文件大小
+    file.seekg(0, std::ios::end);
+    std::streampos file_size = file.tellg();
 
-    if (file.fail()) {
-        throw DatabaseException("Failed to read header page");
+    if (file_size == 0) {
+        // 新文件，初始化头部
+        page_count_ = 1;
+        free_list_head_ = INVALID_PAGE_ID;
+        writeHeader();
+        return;
     }
 
-    // 从文件头中解析出页数
-    std::memcpy(&page_count_, header_page, sizeof(PageID));
+    // 读取头部信息
+    file.seekg(0);
+    file.read(reinterpret_cast<char*>(&page_count_), sizeof(PageID));
+    file.read(reinterpret_cast<char*>(&free_list_head_), sizeof(PageID));
 }
 
 void DiskManager::writeHeader() {
-    std::cout << "writeHeader started" << std::endl;
+    if (!file_manager_->isOpen()) return;
 
     std::lock_guard<std::mutex> lock(io_mutex_);
-    std::cout << "writeHeader lock acquired" << std::endl;
+    auto& file = file_manager_->getFileStream();
 
-    try {
-        char header_page[PAGE_SIZE] = {0};
-        auto& file = file_manager_->getFileStream();
-        std::cout << "Got file stream for header" << std::endl;
-
-        // 检查文件状态
-        if (!file.is_open()) {
-            std::cout << "File is not open" << std::endl;
-            throw DatabaseException("File is not open");
-        }
-
-        if (file.fail()) {
-            std::cout << "File is in fail state" << std::endl;
-            throw DatabaseException("File is in fail state");
-        }
-
-        // 将页数写入文件头
-        std::memcpy(header_page, &page_count_, sizeof(PageID));
-        std::cout << "Page count copied to header: " << page_count_ << std::endl;
-
-        file.seekp(0, std::ios::beg);
-        std::cout << "Seek to beginning" << std::endl;
-
-        file.write(header_page, PAGE_SIZE);
-        std::cout << "Header written" << std::endl;
-
-        file.flush();
-        std::cout << "File flushed" << std::endl;
-
-        if (file.fail()) {
-            std::cout << "Header write failed" << std::endl;
-            throw DatabaseException("Failed to write header");
-        }
-
-        std::cout << "writeHeader completed" << std::endl;
-
-    } catch (const std::exception& e) {
-        std::cout << "Exception in writeHeader: " << e.what() << std::endl;
-        throw;
-    }
+    file.seekp(0);
+    file.write(reinterpret_cast<const char*>(&page_count_), sizeof(PageID));
+    file.write(reinterpret_cast<const char*>(&free_list_head_), sizeof(PageID));
+    file.flush();
 }
 
 } // namespace storage
-} // namespace minidbnamespace minidb
+} // namespace minidb

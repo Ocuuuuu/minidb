@@ -1,56 +1,44 @@
-//
-// Created by tang_ on 2025/9/9.
-//
-
 #ifndef MINIDB_FILEMANAGER_H
 #define MINIDB_FILEMANAGER_H
-#include "common/Constants.h"
-#include "common/Exception.h"
-#include <string>
-//文件流000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+
 #include <fstream>
-#include <unordered_map>
-//命名控件嵌套用法
+#include <string>
+
 namespace minidb {
     namespace storage {
 
         class FileManager {
         public:
-            //构造函数
             FileManager();
-
             ~FileManager();
 
-            // 数据库文件管理
-            //创建数据库
+            // 数据库操作
             void createDatabase(const std::string& db_name);
-
             void openDatabase(const std::string& db_name);
-
             void closeDatabase();
-
             bool isOpen() const;
 
-            // 文件操作
+            // 数据库信息获取
             std::fstream& getFileStream();
             const std::string& getDatabasePath() const;
+            const std::string& getDatabaseName() const;
 
-            // 元数据管理
-            void initializeMetadata();
-            void loadMetadata();
-            void saveMetadata();
+            // 数据库管理 - 移除了static修饰符
+            bool databaseExists(const std::string& db_name);  // 移除static
+            void deleteDatabase(const std::string& db_name);  // 移除static
+            static bool isValidDatabaseName(const std::string& name);  // 保持static
 
         private:
+            void ensureDirectoryExists(const std::string& path);
+
+        private:
+            std::fstream db_file_;
             std::string db_name_;
             std::string db_path_;
-            std::fstream db_file_;
-            bool is_open_{false};
-
-            // 确保目录存在
-            void ensureDirectoryExists(const std::string& path);
+            bool is_open_;
         };
 
     } // namespace storage
 } // namespace minidb
 
-#endif //MINIDB_FILEMANAGER_H
+#endif // MINIDB_FILEMANAGER_H

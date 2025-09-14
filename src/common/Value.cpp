@@ -96,4 +96,106 @@ std::ostream& operator<<(std::ostream& os, const Value& value) {
     return os;
 }
 
+
+
+    // 在 Value.cpp 末尾添加以下实现
+
+bool Value::lessThan(const Value& other) const {
+    if (type_id_ != other.type_id_) {
+        throw TypeMismatchException("Cannot compare values of different types: " +
+                                   std::string(getTypeName(type_id_)) + " and " +
+                                   std::string(getTypeName(other.type_id_)));
+    }
+
+    if (isNull() || other.isNull()) {
+        throw NullValueException("Cannot compare null values");
+    }
+
+    switch (type_id_) {
+        case TypeId::BOOLEAN:
+            return std::get<bool>(value_) < std::get<bool>(other.value_);
+        case TypeId::INTEGER:
+            return std::get<int32_t>(value_) < std::get<int32_t>(other.value_);
+        case TypeId::VARCHAR:
+            return std::get<std::string>(value_) < std::get<std::string>(other.value_);
+        default:
+            throw TypeMismatchException("Unsupported type for comparison: " +
+                                       std::string(getTypeName(type_id_)));
+    }
+}
+
+bool Value::greaterThan(const Value& other) const {
+    if (type_id_ != other.type_id_) {
+        throw TypeMismatchException("Cannot compare values of different types: " +
+                                   std::string(getTypeName(type_id_)) + " and " +
+                                   std::string(getTypeName(other.type_id_)));
+    }
+
+    if (isNull() || other.isNull()) {
+        throw NullValueException("Cannot compare null values");
+    }
+
+    switch (type_id_) {
+        case TypeId::BOOLEAN:
+            return std::get<bool>(value_) > std::get<bool>(other.value_);
+        case TypeId::INTEGER:
+            return std::get<int32_t>(value_) > std::get<int32_t>(other.value_);
+        case TypeId::VARCHAR:
+            return std::get<std::string>(value_) > std::get<std::string>(other.value_);
+        default:
+            throw TypeMismatchException("Unsupported type for comparison: " +
+                                       std::string(getTypeName(type_id_)));
+    }
+}
+
+// 算术操作实现
+Value Value::add(const Value& other) const {
+    if (type_id_ != other.type_id_) {
+        throw TypeMismatchException("Cannot add values of different types");
+    }
+
+    if (isNull() || other.isNull()) {
+        throw NullValueException("Cannot perform arithmetic on null values");
+    }
+
+    switch (type_id_) {
+        case TypeId::INTEGER:
+            return Value(std::get<int32_t>(value_) + std::get<int32_t>(other.value_));
+        default:
+            throw TypeMismatchException("Addition not supported for type: " +
+                                       std::string(getTypeName(type_id_)));
+    }
+}
+
+Value Value::subtract(const Value& other) const {
+    if (type_id_ != other.type_id_) {
+        throw TypeMismatchException("Cannot subtract values of different types");
+    }
+
+    if (isNull() || other.isNull()) {
+        throw NullValueException("Cannot perform arithmetic on null values");
+    }
+
+    switch (type_id_) {
+        case TypeId::INTEGER:
+            return Value(std::get<int32_t>(value_) - std::get<int32_t>(other.value_));
+        default:
+            throw TypeMismatchException("Subtraction not supported for type: " +
+                                       std::string(getTypeName(type_id_)));
+    }
+}
+
+// 自由函数比较运算符实现
+bool operator!=(const Value& lhs, const Value& rhs) {
+    return !(lhs == rhs);
+}
+
+bool operator<(const Value& lhs, const Value& rhs) {
+    return lhs.lessThan(rhs);
+}
+
+bool operator>(const Value& lhs, const Value& rhs) {
+    return lhs.greaterThan(rhs);
+}
+
 } // namespace minidb

@@ -1,85 +1,155 @@
-//
-// Created by tang_ on 2025/9/9.
-//
-
-#include "../../include/storage/BufferManager.h"
+#include "../include/storage/BufferManager.h"
 #include <iostream>
 
 namespace minidb {
 namespace storage {
 
-BufferManager::BufferManager(DiskManager* disk_manager, size_t pool_size,
+BufferManager::BufferManager(std::shared_ptr<DiskManager> disk_manager,
+                           size_t pool_size,
                            BufferReplacementPolicy policy)
-    : disk_manager_(disk_manager), pool_size_(pool_size), policy_(policy) {
-    std::cout << "BufferManager constructor started" << std::endl;
-    std::cout << "Disk manager: " << disk_manager_ << std::endl;
-    std::cout << "Pool size: " << pool_size_ << std::endl;
-    std::cout << "BufferManager constructor completed" << std::endl;
-}
+    : disk_manager_(disk_manager), pool_size_(pool_size), policy_(policy) {}
 
 BufferManager::~BufferManager() {
     flushAllPages();
 }
 
 Page* BufferManager::fetchPage(PageID page_id) {
-    std::lock_guard<std::mutex> lock(buffer_mutex_);
+    std::unique_lock<std::shared_mutex> lock(buffer_mutex_);
 
-    // 首先在缓存中查找
+    // 检查页面是否已在缓冲池中
     auto it = page_table_.find(page_id);
     if (it != page_table_.end()) {
-        // 找到页面，更新访问时间
-        updateAccessTime(page_id);
+        // 页面在缓冲池中，更新访问时间
         hit_count_++;
-        return &(it->second.first);
+        updateAccessTime(page_id);
+        return &(it->second.page);
     }
 
-    // 未找到，增加未命中计数
+    // 页面不在缓冲池中
     miss_count_++;
 
-    // 如果缓存已满，需要替换页面
+    // 如果缓冲池已满，需要淘汰一个页面
     if (page_table_.size() >= pool_size_) {
-        evictPage();
+        if (!evictPage()) {
+            throw BufferPoolFullException("Buffer pool is full and cannot evict any page");
+        }
     }
 
     // 从磁盘读取页面
-    Page new_page(page_id);
-    disk_manager_->readPage(page_id, new_page.getData());
+    char page_data[PAGE_SIZE];
+    disk_manager_->readPage(page_id, page_data);
 
-    // 将新页面加入缓存
+    // 创建新的缓冲帧
+    BufferFrame frame;
+    frame.page.deserialize(page_data);
+    frame.pin_count = 0;
+    frame.is_dirty = false;
+
+    // 添加到LRU列表和页面表
     lru_list_.push_front(page_id);
-    page_table_[page_id] = std::make_pair(new_page, lru_list_.begin());
+    frame.iterator = lru_list_.begin();
 
-    return &(page_table_[page_id].first);
+    auto result = page_table_.emplace(page_id, std::move(frame));
+    if (!result.second) {
+        throw BufferPoolFullException("Failed to insert page into buffer pool");
+    }
+
+    return &(result.first->second.page);
+}
+
+void BufferManager::pinPage(PageID page_id) {
+    std::unique_lock<std::shared_mutex> lock(buffer_mutex_);
+
+    auto it = page_table_.find(page_id);
+    if (it == page_table_.end()) {
+        throw BufferPoolFullException("Page not in buffer pool: " + std::to_string(page_id));
+    }
+
+    it->second.pin_count++;
 }
 
 void BufferManager::unpinPage(PageID page_id, bool is_dirty) {
-    std::lock_guard<std::mutex> lock(buffer_mutex_);
+    std::unique_lock<std::shared_mutex> lock(buffer_mutex_);
 
     auto it = page_table_.find(page_id);
-    if (it != page_table_.end()) {
-        it->second.first.setDirty(is_dirty);
+    if (it == page_table_.end()) {
+        throw BufferPoolFullException("Page not in buffer pool: " + std::to_string(page_id));
+    }
+
+    if (it->second.pin_count == 0) {
+        throw BufferPoolFullException("Page pin count already zero: " + std::to_string(page_id));
+    }
+
+    it->second.pin_count--;
+    it->second.is_dirty = it->second.is_dirty || is_dirty;
+
+    // 如果页面不再被固定，更新访问时间
+    if (it->second.pin_count == 0) {
+        updateAccessTime(page_id);
     }
 }
 
 void BufferManager::flushPage(PageID page_id) {
-    std::lock_guard<std::mutex> lock(buffer_mutex_);
+    std::unique_lock<std::shared_mutex> lock(buffer_mutex_);
 
     auto it = page_table_.find(page_id);
-    if (it != page_table_.end() && it->second.first.isDirty()) {
-        disk_manager_->writePage(page_id, it->second.first.getData());
-        it->second.first.setDirty(false);
+    if (it == page_table_.end()) {
+        return; // 页面不在缓冲池中，无需刷新
+    }
+
+    if (it->second.is_dirty) {
+        // 序列化页面数据
+        char page_data[PAGE_SIZE];
+        it->second.page.serialize(page_data);
+
+        // 写入磁盘
+        disk_manager_->writePage(page_id, page_data);
+
+        it->second.is_dirty = false;
+        it->second.page.setDirty(false);
     }
 }
 
 void BufferManager::flushAllPages() {
-    std::lock_guard<std::mutex> lock(buffer_mutex_);
+    std::unique_lock<std::shared_mutex> lock(buffer_mutex_);
 
-    for (auto& entry : page_table_) {
-        if (entry.second.first.isDirty()) {
-            disk_manager_->writePage(entry.first, entry.second.first.getData());
-            entry.second.first.setDirty(false);
+    for (auto& pair : page_table_) {
+        if (pair.second.is_dirty) {
+            // 序列化页面数据
+            char page_data[PAGE_SIZE];
+            pair.second.page.serialize(page_data);
+
+            // 写入磁盘
+            disk_manager_->writePage(pair.first, page_data);
+
+            pair.second.is_dirty = false;
+            pair.second.page.setDirty(false);
         }
     }
+}
+
+void BufferManager::removePage(PageID page_id) {
+    std::unique_lock<std::shared_mutex> lock(buffer_mutex_);
+
+    auto it = page_table_.find(page_id);
+    if (it == page_table_.end()) {
+        return; // 页面不在缓冲池中
+    }
+
+    if (it->second.pin_count > 0) {
+        throw BufferPoolFullException("Cannot remove pinned page: " + std::to_string(page_id));
+    }
+
+    // 如果是脏页，先刷新到磁盘
+    if (it->second.is_dirty) {
+        char page_data[PAGE_SIZE];
+        it->second.page.serialize(page_data);
+        disk_manager_->writePage(page_id, page_data);
+    }
+
+    // 从LRU列表和页面表中移除
+    lru_list_.erase(it->second.iterator);
+    page_table_.erase(it);
 }
 
 double BufferManager::getHitRate() const {
@@ -88,39 +158,51 @@ double BufferManager::getHitRate() const {
     return static_cast<double>(hit_count_) / total;
 }
 
-void BufferManager::evictPage() {
-    if (lru_list_.empty()) return;
-
-    PageID victim_page_id;
+bool BufferManager::evictPage() {
+    // 根据替换策略选择要淘汰的页面
+    PageID page_to_evict = INVALID_PAGE_ID;
 
     if (policy_ == BufferReplacementPolicy::LRU) {
-        // LRU策略：淘汰最近最少使用的页面
-        victim_page_id = lru_list_.back();
-        lru_list_.pop_back();
-    } else {
-        // FIFO策略：淘汰最早进入的页面
-        victim_page_id = lru_list_.back();
-        lru_list_.pop_back();
+        // 从LRU列表末尾开始查找未被固定的页面
+        for (auto it = lru_list_.rbegin(); it != lru_list_.rend(); ++it) {
+            auto frame_it = page_table_.find(*it);
+            if (frame_it != page_table_.end() && frame_it->second.pin_count == 0) {
+                page_to_evict = *it;
+                break;
+            }
+        }
+    } else { // FIFO
+        // 从LRU列表末尾开始查找未被固定的页面
+        for (auto it = lru_list_.rbegin(); it != lru_list_.rend(); ++it) {
+            auto frame_it = page_table_.find(*it);
+            if (frame_it != page_table_.end() && frame_it->second.pin_count == 0) {
+                page_to_evict = *it;
+                break;
+            }
+        }
     }
 
-    auto it = page_table_.find(victim_page_id);
-    if (it != page_table_.end()) {
-        if (it->second.first.isDirty()) {
-            disk_manager_->writePage(victim_page_id, it->second.first.getData());
-        }
-        page_table_.erase(it);
+    if (page_to_evict == INVALID_PAGE_ID) {
+        return false; // 没有可淘汰的页面
     }
+
+    // 移除页面
+    removePage(page_to_evict);
+    return true;
 }
 
 void BufferManager::updateAccessTime(PageID page_id) {
-    // 更新页面在LRU列表中的位置
-    auto it = page_table_.find(page_id);
-    if (it != page_table_.end()) {
-        lru_list_.erase(it->second.second);
-        lru_list_.push_front(page_id);
-        it->second.second = lru_list_.begin();
+    if (policy_ == BufferReplacementPolicy::LRU) {
+        auto it = page_table_.find(page_id);
+        if (it != page_table_.end()) {
+            // 从LRU列表中移除并重新添加到头部
+            lru_list_.erase(it->second.iterator);
+            lru_list_.push_front(page_id);
+            it->second.iterator = lru_list_.begin();
+        }
     }
+    // FIFO策略不需要更新访问时间
 }
 
 } // namespace storage
-} // namespace minidb} // namespace minidb
+} // namespace minidb
