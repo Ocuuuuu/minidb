@@ -113,7 +113,7 @@ void FileManager::createDatabase(const std::string& db_name) {
     openDatabase(db_name);
 }
 
-void FileManager::openDatabase(const std::string& db_name) {
+    void FileManager::openDatabase(const std::string& db_name) {
     if (is_open_) {
         closeDatabase();
     }
@@ -136,30 +136,26 @@ void FileManager::openDatabase(const std::string& db_name) {
         ensureDirectoryExists(db_path_obj.parent_path().string());
     }
 
-    // 首先尝试以读写模式打开现有文件
-    db_file_.open(db_path_, std::ios::in | std::ios::out | std::ios::binary);
+    // 使用正确的打开模式：如果文件不存在则创建
+    db_file_.open(db_path_, std::ios::in | std::ios::out | std::ios::binary | std::ios::ate);
 
     if (!db_file_.is_open()) {
-        // 检查文件是否存在
-        if (std::filesystem::exists(db_path_)) {
-            // 文件存在但无法打开（可能被锁定）
-            throw DatabaseNotOpenException("Cannot open database file (may be locked by another process): " + db_path_);
-        } else {
-            // 文件不存在，尝试创建
-            db_file_.open(db_path_, std::ios::out | std::ios::binary);
-            if (db_file_.is_open()) {
-                db_file_.close();
-                // 重新以读写模式打开
-                db_file_.open(db_path_, std::ios::in | std::ios::out | std::ios::binary);
+        // 如果文件不存在，尝试以 out 模式创建
+        db_file_.open(db_path_, std::ios::out | std::ios::binary);
+        if (db_file_.is_open()) {
+            db_file_.close();
+            // 重新以正确的模式打开
+            db_file_.open(db_path_, std::ios::in | std::ios::out | std::ios::binary | std::ios::ate);
+        }
 
-                if (!db_file_.is_open()) {
-                    throw DatabaseNotOpenException("Cannot open newly created database file: " + db_path_);
-                }
-            } else {
-                throw DatabaseNotOpenException("Cannot create database file: " + db_path_);
-            }
+        if (!db_file_.is_open()) {
+            throw DatabaseNotOpenException("Cannot open database file: " + db_path_);
         }
     }
+
+    // 确保文件指针在开头
+    db_file_.seekg(0, std::ios::beg);
+    db_file_.seekp(0, std::ios::beg);
 
     is_open_ = true;
 }

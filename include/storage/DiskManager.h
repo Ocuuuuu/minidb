@@ -4,9 +4,9 @@
 #include "storage/FileManager.h"
 #include "common/Types.h"
 #include "common/Constants.h"
-#include "common/Exception.h"
 #include <mutex>
 #include <memory>
+#include <common/Exception.h>
 
 namespace minidb {
     namespace storage {
@@ -19,8 +19,8 @@ namespace minidb {
             DiskManager(const DiskManager&) = delete;
             DiskManager& operator=(const DiskManager&) = delete;
 
-            void readPage(PageID page_id, char* data);
-            void writePage(PageID page_id, const char* data);
+            void readPage(PageID page_id, char* data, bool require_lock = true);
+            void writePage(PageID page_id, const char* data, bool require_lock = true);
 
             PageID allocatePage();
             void deallocatePage(PageID page_id);
@@ -36,7 +36,7 @@ namespace minidb {
             mutable std::mutex io_mutex_;
 
             void readHeader();
-            void writeHeader();
+            void writeHeader(bool require_lock = true);
         };
 
     } // namespace storage

@@ -19,6 +19,7 @@ if(TEST_SOURCES)
             unit_tests/test_table_info.cpp
             unit_tests/test_catalog_manager.cpp
             integration_tests/test_catalog.cpp
+            unit_tests/test_diskManager.cpp
     )
 
     # 链接主库

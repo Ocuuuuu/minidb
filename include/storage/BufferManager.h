@@ -1,10 +1,11 @@
 #ifndef MINIDB_BUFFERMANAGER_H
 #define MINIDB_BUFFERMANAGER_H
 
-#include "common/Constants.h"
-#include "common/Exception.h"
-#include "storage/Page.h"
-#include "storage/DiskManager.h"
+#include "../../include/common/Constants.h"
+
+#include "../../include/common/Exception.h"
+#include "../../include/storage/Page.h"
+#include "../../include/storage/DiskManager.h"
 #include <list>
 #include <unordered_map>
 #include <shared_mutex>
@@ -15,15 +16,14 @@ namespace minidb {
 
         enum class BufferReplacementPolicy {
             LRU,
-            FIFO
         };
 
         class BufferManager {
         public:
-            BufferManager(std::shared_ptr<DiskManager> disk_manager,
-                         size_t pool_size = DEFAULT_BUFFER_POOL_SIZE,
-                         BufferReplacementPolicy policy = BufferReplacementPolicy::LRU);
-            ~BufferManager();
+
+            explicit BufferManager(std::shared_ptr<DiskManager> disk_manager,
+             size_t pool_size = DEFAULT_BUFFER_POOL_SIZE);
+                   ~BufferManager();
 
             BufferManager(const BufferManager&) = delete;
             BufferManager& operator=(const BufferManager&) = delete;
