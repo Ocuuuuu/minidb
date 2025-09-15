@@ -14,7 +14,8 @@ namespace minidb {
         INVALID,    // 无效类型
         BOOLEAN,    // 布尔类型
         INTEGER,    // 整数类型（主要使用这个）
-        VARCHAR     // 字符串类型
+        VARCHAR,    // 字符串类型
+        FLOAT
     };
 
     // 获取类型名称的辅助函数
