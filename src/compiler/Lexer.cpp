@@ -1,58 +1,58 @@
 #include "../../include/compiler/Lexer.h"
-#include <cctype>    // ÓÃÓÚÅĞ¶Ï×Ö·ûÀàĞÍ£¨×ÖÄ¸/Êı×Ö/¿Õ¸ñ£©
-#include <algorithm> // ÓÃÓÚ²éÕÒ¹Ø¼ü×Ö
+#include <cctype>    // ç”¨äºåˆ¤æ–­å­—ç¬¦ç±»å‹ï¼ˆå­—æ¯/æ•°å­—/ç©ºæ ¼ï¼‰
+#include <algorithm> // ç”¨äºæŸ¥æ‰¾å…³é”®å­—
 #include <utility>
 
-// ¹¹Ôìº¯Êı£º³õÊ¼»¯´Ê·¨·ÖÎöÆ÷µÄSQL×Ö·û´®¡¢Î»ÖÃ¡¢ĞĞºÅ¡¢ÁĞºÅ£¬³õÊ¼»¯¹Ø¼ü×Ö¼¯ºÏ
+// æ„é€ å‡½æ•°ï¼šåˆå§‹åŒ–è¯æ³•åˆ†æå™¨çš„SQLå­—ç¬¦ä¸²ã€ä½ç½®ã€è¡Œå·ã€åˆ—å·ï¼Œåˆå§‹åŒ–å…³é”®å­—é›†åˆ
 Lexer::Lexer(std::string s) : sql(std::move(s)), pos(0), line(1), column(0) {
     initKeywords();
 }
 
-// ³õÊ¼»¯¹Ø¼ü×Ö¼¯ºÏ£¨°üº¬SQL³£ÓÃ¹Ø¼ü×Ö£¬Çø·Ö´óĞ¡Ğ´£©
+// åˆå§‹åŒ–å…³é”®å­—é›†åˆï¼ˆåŒ…å«SQLå¸¸ç”¨å…³é”®å­—ï¼ŒåŒºåˆ†å¤§å°å†™ï¼‰
 void Lexer::initKeywords() {
     keywords = {
         "SELECT", "FROM", "WHERE", "CREATE", "TABLE",
         "INSERT", "INTO", "VALUES", "INT", "INTEGER",
-        "STRING", "VARCHAR", "FLOAT", "DOUBLE",
-        "int", "integer", "string", "varchar", "float", "double"
+        "STRING", "VARCHAR", "FLOAT", "DOUBLE", "DELETE", 
+        "int", "integer", "string", "varchar", "float", "double", "delete"
     };
 }
 
-// Ìø¹ı¿Õ°××Ö·û£¨¿Õ¸ñ¡¢ÖÆ±í·û¡¢»»ĞĞ·û£©£¬²¢¸üĞÂĞĞºÅºÍÁĞºÅ
+// è·³è¿‡ç©ºç™½å­—ç¬¦ï¼ˆç©ºæ ¼ã€åˆ¶è¡¨ç¬¦ã€æ¢è¡Œç¬¦ï¼‰ï¼Œå¹¶æ›´æ–°è¡Œå·å’Œåˆ—å·
 void Lexer::skipWhitespace() {
     while (pos < sql.size()) {
         char c = sql[pos];
         if (c == ' ' || c == '\t') {
-            // ¿Õ¸ñºÍÖÆ±í·û£ºÖ»Ôö¼ÓÁĞºÅ
+            // ç©ºæ ¼å’Œåˆ¶è¡¨ç¬¦ï¼šåªå¢åŠ åˆ—å·
             column++;
             pos++;
         } else if (c == '\n') {
-            // »»ĞĞ·û£ºĞĞºÅ+1£¬ÁĞºÅÖØÖÃÎª0
+            // æ¢è¡Œç¬¦ï¼šè¡Œå·+1ï¼Œåˆ—å·é‡ç½®ä¸º0
             line++;
             pos++;
             column = 0;
         } else {
-            // ·Ç¿Õ°××Ö·û£ºÍ£Ö¹Ìø¹ı
+            // éç©ºç™½å­—ç¬¦ï¼šåœæ­¢è·³è¿‡
             break;
         }
     }
 }
 
-// ´¦Àí±êÊ¶·ûºÍ¹Ø¼ü×Ö£¨ÒÔ×ÖÄ¸»òÏÂ»®Ïß¿ªÍ·£¬ºóĞø¿É¸ú×ÖÄ¸¡¢Êı×Ö»òÏÂ»®Ïß£©
+// å¤„ç†æ ‡è¯†ç¬¦å’Œå…³é”®å­—ï¼ˆä»¥å­—æ¯æˆ–ä¸‹åˆ’çº¿å¼€å¤´ï¼Œåç»­å¯è·Ÿå­—æ¯ã€æ•°å­—æˆ–ä¸‹åˆ’çº¿ï¼‰
 Token Lexer::handleIdentifierOrKeyword() {
-    int startColumn = column;  // ¼ÇÂ¼ÆğÊ¼ÁĞºÅ£¨ÓÃÓÚ´íÎó¶¨Î»£©
-    size_t startPos = pos;     // ¼ÇÂ¼ÆğÊ¼Î»ÖÃ£¨ÓÃÓÚ½ØÈ¡×Ö·û´®£©
+    int startColumn = column;  // è®°å½•èµ·å§‹åˆ—å·ï¼ˆç”¨äºé”™è¯¯å®šä½ï¼‰
+    size_t startPos = pos;     // è®°å½•èµ·å§‹ä½ç½®ï¼ˆç”¨äºæˆªå–å­—ç¬¦ä¸²ï¼‰
 
-    // ±éÀú×Ö·ûÖ±µ½Óöµ½·Ç×ÖÄ¸/Êı×Ö/ÏÂ»®Ïß
+    // éå†å­—ç¬¦ç›´åˆ°é‡åˆ°éå­—æ¯/æ•°å­—/ä¸‹åˆ’çº¿
     while (pos < sql.size() && (isalnum(sql[pos]) || sql[pos] == '_')) {
         pos++;
         column++;
     }
 
-    // ½ØÈ¡´ÓÆğÊ¼Î»ÖÃµ½µ±Ç°Î»ÖÃµÄ×Ö·û´®
+    // æˆªå–ä»èµ·å§‹ä½ç½®åˆ°å½“å‰ä½ç½®çš„å­—ç¬¦ä¸²
     std::string word = sql.substr(startPos, pos - startPos);
 
-    // ÅĞ¶ÏÊÇ·ñÎª¹Ø¼ü×Ö£¨ÔÚ¹Ø¼ü×Ö¼¯ºÏÖĞÔòÎª¹Ø¼ü×Ö£¬·ñÔòÎª±êÊ¶·û£©
+    // åˆ¤æ–­æ˜¯å¦ä¸ºå…³é”®å­—ï¼ˆåœ¨å…³é”®å­—é›†åˆä¸­åˆ™ä¸ºå…³é”®å­—ï¼Œå¦åˆ™ä¸ºæ ‡è¯†ç¬¦ï¼‰
     if (keywords.find(word) != keywords.end()) {
         return Token(TokenType::KEYWORD, word, line, startColumn);
     } else {
@@ -60,12 +60,12 @@ Token Lexer::handleIdentifierOrKeyword() {
     }
 }
 
-// ´¦Àí³£Êı£¨À©Õ¹Ö§³Ö£ºÕûÊı¡¢¸¡µãÊı¡¢µ¥Ë«ÒıºÅ×Ö·û´®£©
+// å¤„ç†å¸¸æ•°ï¼ˆæ‰©å±•æ”¯æŒï¼šæ•´æ•°ã€æµ®ç‚¹æ•°ã€å•åŒå¼•å·å­—ç¬¦ä¸²ï¼‰
 Token Lexer::handleConstant() {
     int startColumn = column;
     size_t startPos = pos;
 
-    // 1. ´¦Àí×Ö·û´®³£Á¿£¨Ö§³Öµ¥/Ë«ÒıºÅºÍ×ªÒå£©
+    // 1. å¤„ç†å­—ç¬¦ä¸²å¸¸é‡ï¼ˆæ”¯æŒå•/åŒå¼•å·å’Œè½¬ä¹‰ï¼‰
     if (sql[pos] == '"' || sql[pos] == '\'') {
         char quoteChar = sql[pos];
         pos++;
@@ -88,7 +88,7 @@ Token Lexer::handleConstant() {
             column++;
             std::string str = sql.substr(startPos + 1, pos - startPos - 2);
 
-            // ´¦Àí×ªÒåĞòÁĞ
+            // å¤„ç†è½¬ä¹‰åºåˆ—
             size_t escPos = 0;
             while (escPos < str.size()) {
                 if (str[escPos] == '\\' && escPos + 1 < str.size()) {
@@ -110,10 +110,10 @@ Token Lexer::handleConstant() {
         }
     }
 
-    // 2. ´¦ÀíÊıÖµ³£Á¿£¨Ç¿ÖÆÍêÕû¶ÁÈ¡£©
+    // 2. å¤„ç†æ•°å€¼å¸¸é‡ï¼ˆå¼ºåˆ¶å®Œæ•´è¯»å–ï¼‰
     else if (isdigit(static_cast<unsigned char>(sql[pos])) || sql[pos] == '.') {
         size_t numStart = pos;
-        // ¶ÁÈ¡ËùÓĞÁ¬ĞøµÄÊı×ÖºÍĞ¡Êıµã£¨²»ÌáÇ°ÖÕÖ¹£©
+        // è¯»å–æ‰€æœ‰è¿ç»­çš„æ•°å­—å’Œå°æ•°ç‚¹ï¼ˆä¸æå‰ç»ˆæ­¢ï¼‰
         while (pos < sql.size()) {
             char c = sql[pos];
             if (isdigit(static_cast<unsigned char>(c)) || c == '.') {
@@ -124,13 +124,13 @@ Token Lexer::handleConstant() {
             }
         }
 
-        // ½ØÈ¡ÍêÕûĞòÁĞ
+        // æˆªå–å®Œæ•´åºåˆ—
         std::string numStr = sql.substr(numStart, pos - numStart);
         int dotCount = std::count(numStr.begin(), numStr.end(), '.');
         bool hasDigit = std::any_of(numStr.begin(), numStr.end(),
                                   [](unsigned char c) { return std::isdigit(c); });
 
-        // ºÏ·¨ĞÔÅĞ¶Ï
+        // åˆæ³•æ€§åˆ¤æ–­
         if (dotCount > 1 || !hasDigit) {
             return Token(TokenType::ERROR, "Invalid number format (" + numStr + ")", line, startColumn);
         }
@@ -138,23 +138,23 @@ Token Lexer::handleConstant() {
         return Token(TokenType::CONSTANT, numStr, line, startColumn);
     }
 
-    // 3. Î´Öª³£Á¿ÀàĞÍ
+    // 3. æœªçŸ¥å¸¸é‡ç±»å‹
     return Token(TokenType::ERROR, "Unknown constant type", line, startColumn);
 }
 
-// ´¦ÀíÔËËã·û
+// å¤„ç†è¿ç®—ç¬¦
 Token Lexer::handleOperator() {
     int startColumn = column;
     char current = sql[pos];
 
-    // ÓÅÏÈÅĞ¶ÏË«×Ö·ûÔËËã·û£¨Ë³ĞòºÜÖØÒª£©
+    // ä¼˜å…ˆåˆ¤æ–­åŒå­—ç¬¦è¿ç®—ç¬¦ï¼ˆé¡ºåºå¾ˆé‡è¦ï¼‰
     if (pos + 1 < sql.size()) {
         char next = sql[pos + 1];
         std::string op_str;
         op_str += current;
         op_str += next;
 
-        // Ã÷È·ÁĞ³öËùÓĞË«×Ö·ûÔËËã·û£¬È·±£¸²¸Ç
+        // æ˜ç¡®åˆ—å‡ºæ‰€æœ‰åŒå­—ç¬¦è¿ç®—ç¬¦ï¼Œç¡®ä¿è¦†ç›–
         const std::unordered_set<std::string> double_ops = {"==", "!=", ">=", "<="};
         if (double_ops.count(op_str)) {
             pos += 2;
@@ -163,7 +163,7 @@ Token Lexer::handleOperator() {
         }
     }
 
-    // ´¦Àíµ¥×Ö·ûÔËËã·û
+    // å¤„ç†å•å­—ç¬¦è¿ç®—ç¬¦
     const std::unordered_set<char> single_ops = {'+', '-', '*', '/', '%', '=', '>', '<', '!'};
     if (single_ops.count(current)) {
         pos++;
@@ -171,13 +171,13 @@ Token Lexer::handleOperator() {
         return Token(TokenType::OPERATOR, std::string(1, current), line, startColumn);
     }
 
-    // ÎŞĞ§ÔËËã·û
+    // æ— æ•ˆè¿ç®—ç¬¦
     pos++;
     column++;
     return Token(TokenType::ERROR, "Unrecognized operator (" + std::string(1, current) + ")", line, startColumn);
 }
 
-// ´¦Àí½ç·û£¨¶ººÅ¡¢·ÖºÅ¡¢À¨ºÅµÈ£©
+// å¤„ç†ç•Œç¬¦ï¼ˆé€—å·ã€åˆ†å·ã€æ‹¬å·ç­‰ï¼‰
 Token Lexer::handleDelimiter() {
     int startColumn = column;
     // size_t startPos = pos;
@@ -190,7 +190,7 @@ Token Lexer::handleDelimiter() {
         return Token(TokenType::DELIMITER, delimStr, line, startColumn);
     }
 
-    // ·Ç·¨½ç·û£º·µ»Ø´íÎó
+    // éæ³•ç•Œç¬¦ï¼šè¿”å›é”™è¯¯
     return Token(TokenType::ERROR, "Invalid delimiter", line, startColumn);
 }
 
@@ -206,7 +206,7 @@ Token Lexer::nextToken() {
     if (isalpha(c) || c == '_') {
         return handleIdentifierOrKeyword();
     }
-    // ¹Ø¼üĞŞ¸´£º¼ÓÈë c == '.'£¬È·±£Ğ¡Êıµã½øÈë³£Á¿´¦Àí
+    // å…³é”®ä¿®å¤ï¼šåŠ å…¥ c == '.'ï¼Œç¡®ä¿å°æ•°ç‚¹è¿›å…¥å¸¸é‡å¤„ç†
     else if (isdigit(c) || c == '.' || c == '"' || c == '\'') {
         return handleConstant();
     }
@@ -214,30 +214,30 @@ Token Lexer::nextToken() {
              c == '=' || c == '>' || c == '<' || c == '!') {
         return handleOperator();
              }
-    else if (c == ',' || c == ';' || c == '(' || c == ')' || c == '{' || c == '}') { // ²¹³ä } ½ç·û
+    else if (c == ',' || c == ';' || c == '(' || c == ')' || c == '{' || c == '}') { // è¡¥å…… } ç•Œç¬¦
         return handleDelimiter();
     }
     else {
-        // ĞŞ¸´£ºÖĞÎÄ¡úÓ¢ÎÄ´íÎóĞÅÏ¢
+        // ä¿®å¤ï¼šä¸­æ–‡â†’è‹±æ–‡é”™è¯¯ä¿¡æ¯
         pos++;
         column++;
         return Token(TokenType::ERROR, "Unrecognized character (" + std::string(1, c) + ")", line, column - 1);
     }
 }
 
-// »ñÈ¡ËùÓĞToken£¨Ö±µ½Óöµ½EOF£©
+// è·å–æ‰€æœ‰Tokenï¼ˆç›´åˆ°é‡åˆ°EOFï¼‰
 vector<Token> Lexer::getAllTokens() {
     vector<Token> tokens;
-    // Ö±½Ó»ñÈ¡µÚÒ»¸öToken£¬ÎŞĞèÄ¬ÈÏ¹¹Ôì
+    // ç›´æ¥è·å–ç¬¬ä¸€ä¸ªTokenï¼Œæ— éœ€é»˜è®¤æ„é€ 
     Token current_token = nextToken();
 
-    // ±éÀúËùÓĞ·ÇEOFµÄToken£¬Ìí¼Óµ½ÁĞ±íÖĞ
+    // éå†æ‰€æœ‰éEOFçš„Tokenï¼Œæ·»åŠ åˆ°åˆ—è¡¨ä¸­
     while (current_token.type != TokenType::EOF_TOKEN) {
         tokens.push_back(current_token);
-        current_token = nextToken();  // »ñÈ¡ÏÂÒ»¸öToken
+        current_token = nextToken();  // è·å–ä¸‹ä¸€ä¸ªToken
     }
 
-    // ×îºóÌí¼ÓEOF_TOKEN£¬±ê¼ÇTokenĞòÁĞ½áÊø
+    // æœ€åæ·»åŠ EOF_TOKENï¼Œæ ‡è®°Tokenåºåˆ—ç»“æŸ
     tokens.push_back(current_token);
     return tokens;
 }

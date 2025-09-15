@@ -50,4 +50,11 @@ public:
     string tableName;               //表名（如 "Students"）
     optional<Condition> condition;  //WHERE 条件（可选，用 optional 表示可能不存在）
 };
+
+//DELETE语句的AST节点
+class DeleteAST : public ASTNode {
+public:
+    string tableName;               //表名（如 "Students"）
+    optional<Condition> condition;  //WHERE 条件（可选，用 optional 表示可能不存在）
+};
 #endif //MINIDB_AST_H

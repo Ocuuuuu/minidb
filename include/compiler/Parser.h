@@ -1,8 +1,8 @@
 #ifndef MINIDB_PARSER_H
 #define MINIDB_PARSER_H
 
-#include "AST.h"
-#include "Lexer.h"
+#include "compiler/AST.h"
+#include "compiler/Lexer.h"
 #include <stack>
 #include <unordered_map>
 #include <vector>
@@ -44,6 +44,12 @@ private:
     //匹配当前Token与预期终结符，匹配成功则获取下一个Token
     void match(const string& expectedValue);
 
+    //关键字处理：确保预测表匹配和Token识别逻辑一致
+    string getCurrentTokenKey() const;
+
+    //重置解析器状态（用于重新解析新的SQL语句）
+    void resetParser();
+
     //解析非终结符：Prog（程序入口，对应完整SQL语句）
     unique_ptr<ASTNode> parseProg();
 
@@ -55,6 +61,7 @@ private:
 
     //解析列列表（如"name STRING, age INT"）
     vector<Column> parseColumnList();
+    bool isNonTerminal(const string& symbol);
 
     //解析列列表的递归部分（处理逗号分隔的后续列）
     void parseColumnListPrime();
@@ -71,6 +78,9 @@ private:
     //解析SELECT语句
     unique_ptr<SelectAST> parseSelect();
 
+    //解析DELETE语句
+    unique_ptr<DeleteAST> parseDelete();
+
     //解析查询列列表（如"name, age"或"*"）
     vector<string> parseSelectColumns();
 
@@ -79,6 +89,9 @@ private:
 
     //解析WHERE子句（可选，如"WHERE age > 20"）
     optional<Condition> parseWhereClause();
+
+    // 新增：存储匹配到的Token值
+    std::string matchedValue;
 
 public:
     //构造函数：接收词法分析器，初始化语法栈和预测表

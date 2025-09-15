@@ -1,12 +1,15 @@
 /*
- * Parser.cpp - »ùÓÚLL(1)ÎÄ·¨µÄSQLÓï·¨½âÎöÆ÷
- * Ö§³ÖSQLÓï¾äÀàĞÍ£º
- * 1. SELECT£¨´øWHERE×Ó¾ä¡¢¶àÁĞ²éÑ¯¡¢Í¨Åä·û*£©
- * 2. CREATE TABLE£¨¶àÁĞ¶¨Òå£¬Ö§³ÖSTRING/INTÀàĞÍ£©
- * 3. INSERT£¨¶àÖµ²åÈë£¬¼æÈİ´øÒıºÅ/ÎŞÒıºÅ×Ö·û´®³£Á¿£©
+ * Parser.cpp - åŸºäºLL(1)æ–‡æ³•çš„SQLè¯­æ³•è§£æå™¨
+ * æ”¯æŒSQLè¯­å¥ç±»å‹ï¼š
+ * 1. SELECTï¼ˆå¸¦WHEREå­å¥ã€å¤šåˆ—æŸ¥è¯¢ã€é€šé…ç¬¦*ï¼‰
+ * 2. CREATE TABLEï¼ˆå¤šåˆ—å®šä¹‰ï¼Œæ”¯æŒSTRING/INTç±»å‹ï¼‰
+ * 3. INSERTï¼ˆå¤šå€¼æ’å…¥ï¼Œå…¼å®¹å¸¦å¼•å·/æ— å¼•å·å­—ç¬¦ä¸²å¸¸é‡ï¼‰
+ * 4. DELETEï¼ˆåˆ é™¤è¯­å¥ï¼‰
  */
 
 #include "../../include/compiler/Parser.h"
+
+#include <algorithm>
 #include <iostream>
 #include <stdexcept>
 #include <sstream>
@@ -14,18 +17,18 @@
 
 using namespace std;
 
-//¹¹Ôìº¯Êı
+//æ„é€ å‡½æ•°
 Parser::Parser(Lexer& l)
     : lexer(l),
       currentToken(TokenType::ERROR, "", -1, -1),
       tokenPos(0) {
     initPredictTable();
-    //Óï·¨Õ»³õÊ¼»¯£ºÕ»µ×ÎªEOF£¨½áÊø·û£©£¬Õ»¶¥Îª¿ªÊ¼·ûºÅProg
+    //è¯­æ³•æ ˆåˆå§‹åŒ–ï¼šæ ˆåº•ä¸ºEOFï¼ˆç»“æŸç¬¦ï¼‰ï¼Œæ ˆé¡¶ä¸ºå¼€å§‹ç¬¦å·Prog
     symStack.push("EOF");
     symStack.push("Prog");
-    //´Ó´Ê·¨·ÖÎöÆ÷»ñÈ¡ËùÓĞToken²¢»º´æ
+    //ä»è¯æ³•åˆ†æå™¨è·å–æ‰€æœ‰Tokenå¹¶ç¼“å­˜
     tokens = lexer.getAllTokens();
-    //³õÊ¼»¯µ±Ç°Token£¨ÈôTokenÁ÷·Ç¿Õ£©
+    //åˆå§‹åŒ–å½“å‰Tokenï¼ˆè‹¥Tokenæµéç©ºï¼‰
     if (!tokens.empty()) {
         currentToken = tokens[tokenPos];
     } else {
@@ -33,171 +36,163 @@ Parser::Parser(Lexer& l)
     }
 }
 
-//Ô¤²â±í³õÊ¼»¯£¨LL(1)£©
+//é¢„æµ‹è¡¨åˆå§‹åŒ–ï¼ˆLL(1)ï¼‰
 void Parser::initPredictTable() {
-    // 1. ³ÌĞòÈë¿Ú¹æÔò£ºProg ¡ú Stmt EOF£¨Ò»ÌõSQLÓï¾ä + ½áÊø·û£©
-    predictTable["Prog|SELECT"] = {"Stmt", "EOF"};
-    predictTable["Prog|CREATE"] = {"Stmt", "EOF"};
-    predictTable["Prog|INSERT"] = {"Stmt", "EOF"};
+    // 1. ç¨‹åºå…¥å£è§„åˆ™ï¼šProg â†’ Stmt EOFï¼ˆä¸€æ¡SQLè¯­å¥ + ç»“æŸç¬¦ï¼‰
+    predictTable["Prog|KEYWORD(SELECT)"] = {"Stmt", "EOF"};
+    predictTable["Prog|KEYWORD(CREATE)"] = {"Stmt", "EOF"};
+    predictTable["Prog|KEYWORD(INSERT)"] = {"Stmt", "EOF"};
+    predictTable["Prog|KEYWORD(DELETE)"] = {"Stmt", "EOF"};
 
-    // 2. Óï¾ä¹æÔò£ºStmt ¡ú CreateTable | Insert | Select£¨·Ö·¢µ½¾ßÌåÓï¾ä£©
-    predictTable["Stmt|CREATE"] = {"CreateTable"};
-    predictTable["Stmt|INSERT"] = {"Insert"};
-    predictTable["Stmt|SELECT"] = {"Select"};
+    // 2. è¯­å¥è§„åˆ™ï¼šStmt â†’ CreateTable | Insert | Select | Deleteï¼ˆåˆ†å‘åˆ°å…·ä½“è¯­å¥ï¼‰
+    predictTable["Stmt|KEYWORD(CREATE)"] = {"CreateTable"};
+    predictTable["Stmt|KEYWORD(INSERT)"] = {"Insert"};
+    predictTable["Stmt|KEYWORD(SELECT)"] = {"Select"};
+    predictTable["Stmt|KEYWORD(DELETE)"] = {"Delete"};
 
-    // 3. CREATE TABLEÓï¾ä¹æÔò£ºCreateTable ¡ú CREATE TABLE ±íÃû ( ÁĞÁĞ±í ) ;
-    predictTable["CreateTable|CREATE"] = {
+    // 12. DELETEè¯­å¥è§„åˆ™ï¼šDelete â†’ DELETE FROM è¡¨å WHEREå­å¥ ;
+    predictTable["Delete|KEYWORD(DELETE)"] = {
+        "KEYWORD(DELETE)", "KEYWORD(FROM)", "IDENTIFIER", "WhereClause", SEMICOLON
+    };
+
+    // 3. CREATE TABLEè¯­å¥è§„åˆ™ï¼šCreateTable â†’ CREATE TABLE è¡¨å ( åˆ—åˆ—è¡¨ ) ;
+    predictTable["CreateTable|KEYWORD(CREATE)"] = {
         "KEYWORD(CREATE)", "KEYWORD(TABLE)", "IDENTIFIER",
         LPAREN, "ColumnList", RPAREN, SEMICOLON
     };
 
-    // 4. ÁĞÁĞ±í¹æÔò£¨Ïû³ı×óµİ¹é£©
-    predictTable["ColumnList|IDENTIFIER"] = {"Column", "ColumnList'"};  // ³õÊ¼ÁĞ£¨ÓÉÁĞÃû´¥·¢£©
-    predictTable["ColumnList'|,"] = {COMMA, "Column", "ColumnList'"};   // ¶ººÅºó½ÓĞÂÁĞ
-    predictTable["ColumnList'|)"] = {};                                 // ÓÒÀ¨ºÅ½áÊø£¨¿Õ²úÉúÊ½£©
+    // 4. åˆ—åˆ—è¡¨è§„åˆ™ï¼ˆæ¶ˆé™¤å·¦é€’å½’ï¼‰
+    predictTable["ColumnList|IDENTIFIER"] = {"Column", "ColumnList'"};  // åˆå§‹åˆ—ï¼ˆç”±åˆ—åè§¦å‘ï¼‰
+    predictTable["ColumnList'|,"] = {COMMA, "Column", "ColumnList'"};   // é€—å·åæ¥æ–°åˆ—
+    predictTable["ColumnList'|)"] = {};                                 // å³æ‹¬å·ç»“æŸï¼ˆç©ºäº§ç”Ÿå¼ï¼‰
 
-    // 5. ÁĞ¶¨Òå¹æÔò£ºColumn ¡ú ÁĞÃû ÀàĞÍ¹Ø¼ü×Ö£¨À©Õ¹Ö§³ÖVARCHAR/INTEGER£©
+    // 5. åˆ—å®šä¹‰è§„åˆ™ï¼šColumn â†’ åˆ—å ç±»å‹å…³é”®å­—ï¼ˆæ‰©å±•æ”¯æŒVARCHAR/INTEGERï¼‰
     predictTable["Column|IDENTIFIER"] = {"IDENTIFIER", "KEYWORD(TYPE)"};
-    // À©Õ¹ÀàĞÍ¹Ø¼ü×ÖÆ¥Åä£ºÖ§³ÖINT/INTEGER¡¢STRING/VARCHAR£¨¼æÈİ´óĞ¡Ğ´£©
-    predictTable["KEYWORD(TYPE)|INT"] = {"KEYWORD(INT)"};
-    predictTable["KEYWORD(TYPE)|INTEGER"] = {"KEYWORD(INTEGER)"};  // ĞÂÔöINTEGER
-    predictTable["KEYWORD(TYPE)|STRING"] = {"KEYWORD(STRING)"};
-    predictTable["KEYWORD(TYPE)|VARCHAR"] = {"KEYWORD(VARCHAR)"};  // ĞÂÔöVARCHAR
-    // ¼æÈİĞ¡Ğ´ÀàĞÍ
-    predictTable["KEYWORD(TYPE)|int"] = {"KEYWORD(int)"};
-    predictTable["KEYWORD(TYPE)|integer"] = {"KEYWORD(integer)"};
-    predictTable["KEYWORD(TYPE)|string"] = {"KEYWORD(string)"};
-    predictTable["KEYWORD(TYPE)|varchar"] = {"KEYWORD(varchar)"};
+    // æ‰©å±•ç±»å‹å…³é”®å­—åŒ¹é…ï¼šæ”¯æŒINT/INTEGERã€STRING/VARCHARï¼ˆå…¼å®¹å¤§å°å†™ï¼‰
+    predictTable["KEYWORD(TYPE)|KEYWORD(INT)"] = {"KEYWORD(INT)"};
+    predictTable["KEYWORD(TYPE)|KEYWORD(INTEGER)"] = {"KEYWORD(INTEGER)"};
+    predictTable["KEYWORD(TYPE)|KEYWORD(STRING)"] = {"KEYWORD(STRING)"};
+    predictTable["KEYWORD(TYPE)|KEYWORD(VARCHAR)"] = {"KEYWORD(VARCHAR)"};
+    predictTable["KEYWORD(TYPE)|KEYWORD(FLOAT)"] = {"KEYWORD(FLOAT)"};
+    predictTable["KEYWORD(TYPE)|KEYWORD(BOOLEAN)"] = {"KEYWORD(BOOLEAN)"};
 
-    // 6. INSERTÓï¾ä¹æÔò£ºInsert ¡ú INSERT INTO ±íÃû VALUES ( ÖµÁĞ±í ) ;
-    predictTable["Insert|INSERT"] = {
+    // 6. INSERTè¯­å¥è§„åˆ™ï¼šInsert â†’ INSERT INTO è¡¨å VALUES ( å€¼åˆ—è¡¨ ) ;
+    predictTable["Insert|KEYWORD(INSERT)"] = {
         "KEYWORD(INSERT)", "KEYWORD(INTO)", "IDENTIFIER",
         "KEYWORD(VALUES)", LPAREN, "ValueList", RPAREN, SEMICOLON
     };
 
-    // 7. ÖµÁĞ±í¹æÔò£¨Ïû³ı×óµİ¹é£¬¼æÈİÎŞÒıºÅ×Ö·û´®£©
-    predictTable["ValueList|CONSTANT"] = {"CONSTANT", "ValueList'"};    // Õı³£³£Á¿£¨´øÒıºÅ×Ö·û´®/Êı×Ö£©
-    predictTable["ValueList|IDENTIFIER"] = {"CONSTANT", "ValueList'"};  // ¼æÈİÎŞÒıºÅ×Ö·û´®£¨¶µµ×£©
-    predictTable["ValueList'|,"] = {COMMA, "CONSTANT", "ValueList'"};   // ¶ººÅºó½ÓĞÂÖµ
-    predictTable["ValueList'|)"] = {};                                 // ÓÒÀ¨ºÅ½áÊø£¨¿Õ²úÉúÊ½£©
+    // 7. å€¼åˆ—è¡¨è§„åˆ™ï¼ˆæ¶ˆé™¤å·¦é€’å½’ï¼Œå…¼å®¹æ— å¼•å·å­—ç¬¦ä¸²ï¼‰
+    predictTable["ValueList|CONSTANT"] = {"CONSTANT", "ValueList'"};    // æ­£å¸¸å¸¸é‡ï¼ˆå¸¦å¼•å·å­—ç¬¦ä¸²/æ•°å­—ï¼‰
+    predictTable["ValueList|IDENTIFIER"] = {"CONSTANT", "ValueList'"};  // å…¼å®¹æ— å¼•å·å­—ç¬¦ä¸²ï¼ˆå…œåº•ï¼‰
+    predictTable["ValueList'|,"] = {COMMA, "CONSTANT", "ValueList'"};   // é€—å·åæ¥æ–°å€¼
+    predictTable["ValueList'|)"] = {};                                 // å³æ‹¬å·ç»“æŸï¼ˆç©ºäº§ç”Ÿå¼ï¼‰
 
-    // 8. SELECTÓï¾ä¹æÔò£ºSelect ¡ú SELECT ²éÑ¯ÁĞ FROM ±íÃû WHERE×Ó¾ä ;
-    predictTable["Select|SELECT"] = {
+    // 8. SELECTè¯­å¥è§„åˆ™ï¼šSelect â†’ SELECT æŸ¥è¯¢åˆ— FROM è¡¨å WHEREå­å¥ ;
+    predictTable["Select|KEYWORD(SELECT)"] = {
         "KEYWORD(SELECT)", "SelectColumns", "KEYWORD(FROM)",
         "IDENTIFIER", "WhereClause", SEMICOLON
     };
 
-    // 9. ²éÑ¯ÁĞÁĞ±í¹æÔò£¨Ïû³ı×óµİ¹é£¬Ö§³ÖÍ¨Åä·û£©
-    predictTable["SelectColumns|*"] = {STAR};                           // Í¨Åä·û*£¨²éÑ¯ËùÓĞÁĞ£©
-    predictTable["SelectColumns|IDENTIFIER"] = {"IDENTIFIER", "SelectColumns'"};  // ¾ßÌåÁĞÃû
-    predictTable["SelectColumns'|,"] = {COMMA, "IDENTIFIER", "SelectColumns'"};   // ¶ººÅºó½ÓĞÂ²éÑ¯ÁĞ
-    predictTable["SelectColumns'|FROM"] = {};                             // Óöµ½FROM½áÊø
-    predictTable["SelectColumns'|;"] = {};                               // Óöµ½·ÖºÅ½áÊø£¨ÎŞFROM³¡¾°£©
+    // 9. æŸ¥è¯¢åˆ—åˆ—è¡¨è§„åˆ™ï¼ˆæ¶ˆé™¤å·¦é€’å½’ï¼Œæ”¯æŒé€šé…ç¬¦ï¼‰
+    predictTable["SelectColumns|STAR"] = {STAR};                           // é€šé…ç¬¦*ï¼ˆæŸ¥è¯¢æ‰€æœ‰åˆ—ï¼‰
+    predictTable["SelectColumns|IDENTIFIER"] = {"IDENTIFIER", "SelectColumns'"};  // å…·ä½“åˆ—å
+    predictTable["SelectColumns'|,"] = {COMMA, "IDENTIFIER", "SelectColumns'"};   // é€—å·åæ¥æ–°æŸ¥è¯¢åˆ—
+    predictTable["SelectColumns'|KEYWORD(FROM)"] = {};                             // é‡åˆ°FROMç»“æŸ
+    predictTable["SelectColumns'|;"] = {};                               // é‡åˆ°åˆ†å·ç»“æŸï¼ˆæ— FROMåœºæ™¯ï¼‰
 
-    // 10. WHERE×Ó¾ä¹æÔò£¨¿ÉÑ¡£©
-    predictTable["WhereClause|WHERE"] = {"KEYWORD(WHERE)", "Condition"};  // ÓĞWHEREÊ±½âÎöÌõ¼ş
-    predictTable["WhereClause|;"] = {};                                 // ÎŞWHEREÊ±Ö±½Ó½áÊø
+    // 10. WHEREå­å¥è§„åˆ™ï¼ˆå¯é€‰ï¼‰
+    predictTable["WhereClause|KEYWORD(WHERE)"] = {"KEYWORD(WHERE)", "Condition"};  // æœ‰WHEREæ—¶è§£ææ¡ä»¶
+    predictTable["WhereClause|;"] = {};                                 // æ— WHEREæ—¶ç›´æ¥ç»“æŸ
 
-    // 11. Ìõ¼ş±í´ïÊ½¹æÔò£ºCondition ¡ú ÁĞÃû ÔËËã·û Öµ£¨IDENTIFIER ¡ú ÁĞÃû£¬OPERATOR ¡ú ÔËËã·û£¬CONSTANT ¡ú Öµ£©
+    // 11. æ¡ä»¶è¡¨è¾¾å¼è§„åˆ™ï¼šCondition â†’ åˆ—å è¿ç®—ç¬¦ å€¼ï¼ˆIDENTIFIER â†’ åˆ—åï¼ŒOPERATOR â†’ è¿ç®—ç¬¦ï¼ŒCONSTANT â†’ å€¼ï¼‰
     predictTable["Condition|IDENTIFIER"] = {"IDENTIFIER", "OPERATOR", "CONSTANT"};
 }
 
-//µ÷ÊÔ¸¨Öúº¯Êı
-// void Parser::debugString(const string& s, const string& label) {
-    // cerr << "[Debug] " << label << " - ³¤¶È: " << s.length() << ", ×Ö·û: ";
-    // for (char c : s) {
-    //     cerr << "'" << c << "'(" << static_cast<int>(c) << ") ";
-    // }
-    // cerr << endl;
-// }
 
-// void Parser::debugState() {
-    // cerr << "\n[Debug] µ±Ç°Token: " << currentToken.value
-    //      << " (ÀàĞÍ: " << static_cast<int>(currentToken.type) << ")" << endl;
-
-    // stack<string> tempStack = symStack;
-    // cerr << "[Debug] Õ»×´Ì¬£¨¶¥¡úµ×£©: ";
-    // while (!tempStack.empty()) {
-        // cerr << tempStack.top() << " ";
-        // tempStack.pop();
-    // }
-    // cerr << endl;
-// }
-
-//ºËĞÄ½âÎöº¯Êı
-// ½âÎö·ÇÖÕ½á·û£º¸ù¾İµ±Ç°TokenºÍÔ¤²â±í£¬Ñ¹Èë¶ÔÓ¦²úÉúÊ½·ûºÅ
+//æ ¸å¿ƒè§£æå‡½æ•°
+// è§£æéç»ˆç»“ç¬¦ï¼šæ ¹æ®å½“å‰Tokenå’Œé¢„æµ‹è¡¨ï¼Œå‹å…¥å¯¹åº”äº§ç”Ÿå¼ç¬¦å·
 void Parser::parseNonTerminal(const string& nonTerminal) {
-    //1. Éú³Éµ±Ç°TokenµÄ±êÊ¶£¨ÓÃÓÚ²éÑ¯Ô¤²â±í£¬Èç "SELECT"¡¢"IDENTIFIER"£©
+    //1. ç”Ÿæˆå½“å‰Tokençš„æ ‡è¯†ï¼ˆç”¨äºæŸ¥è¯¢é¢„æµ‹è¡¨ï¼Œå¦‚ "KEYWORD(SELECT)"ã€"IDENTIFIER"ï¼‰
     string currentTokenKey;
     if (currentToken.type == TokenType::KEYWORD) {
-        currentTokenKey = currentToken.value;
+        // å°†å…³é”®å­—è½¬æ¢ä¸ºå¤§å†™ï¼Œç¡®ä¿å¤§å°å†™å…¼å®¹
+        string keywordValue = currentToken.value;
+        transform(keywordValue.begin(), keywordValue.end(), keywordValue.begin(), ::toupper);
+        currentTokenKey = "KEYWORD(" + keywordValue + ")";
     } else if (currentToken.type == TokenType::IDENTIFIER) {
         currentTokenKey = "IDENTIFIER";
     } else if (currentToken.type == TokenType::CONSTANT) {
         currentTokenKey = "CONSTANT";
     } else if (currentToken.type == TokenType::OPERATOR) {
-        currentTokenKey = "OPERATOR";
+        // ç‰¹æ®Šå¤„ç†é€šé…ç¬¦*ï¼Œç¡®ä¿å®ƒè¢«æ­£ç¡®è¯†åˆ«ä¸ºSTARè€Œä¸æ˜¯OPERATOR
+        if (currentToken.value == "*") {
+            currentTokenKey = STAR;
+        } else {
+            currentTokenKey = "OPERATOR";
+        }
     } else if (currentToken.type == TokenType::DELIMITER) {
         currentTokenKey = currentToken.value;
     } else if (currentToken.type == TokenType::EOF_TOKEN) {
         currentTokenKey = "EOF";
     } else {
-        throw runtime_error("Î´ÖªTokenÀàĞÍ: " + to_string(static_cast<int>(currentToken.type)));
+        throw runtime_error("æœªçŸ¥Tokenç±»å‹: " + to_string(static_cast<int>(currentToken.type)));
     }
 
-    //2. ¹¹½¨Ô¤²â±í²éÑ¯¼ü£¨¸ñÊ½£º"·ÇÖÕ½á·û|µ±Ç°Token±êÊ¶"£©
+    //2. æ„å»ºé¢„æµ‹è¡¨æŸ¥è¯¢é”®ï¼ˆæ ¼å¼ï¼š"éç»ˆç»“ç¬¦|å½“å‰Tokenæ ‡è¯†"ï¼‰
     string tableKey = nonTerminal + "|" + currentTokenKey;
     if (predictTable.find(tableKey) == predictTable.end()) {
         stringstream errMsg;
-        errMsg << "ÎŞÆ¥Åä²úÉúÊ½: " << tableKey
-               << "£¨·ÇÖÕ½á·û: " << nonTerminal << ", Token: " << currentToken.value << "£©";
+        errMsg << "æ— åŒ¹é…äº§ç”Ÿå¼: " << tableKey
+               << "ï¼ˆéç»ˆç»“ç¬¦: " << nonTerminal << ", Token: " << currentToken.value << "ï¼‰";
         throw runtime_error(errMsg.str());
     }
     vector<string> production = predictTable[tableKey];
 
-    //3. ÑéÖ¤Óï·¨Õ»¶¥ÊÇ·ñÎªµ±Ç°·ÇÖÕ½á·û£¨È·±£½âÎöÂß¼­ÕıÈ·ĞÔ£©
+    //3. éªŒè¯è¯­æ³•æ ˆé¡¶æ˜¯å¦ä¸ºå½“å‰éç»ˆç»“ç¬¦ï¼ˆç¡®ä¿è§£æé€»è¾‘æ­£ç¡®æ€§ï¼‰
     if (symStack.empty() || symStack.top() != nonTerminal) {
         stringstream errMsg;
-        errMsg << "Õ»¶¥Òì³££º½âÎö'" << nonTerminal << "'Ê±£¬Ô¤ÆÚ'" << nonTerminal
-               << "', Êµ¼Ê'" << (symStack.empty() ? "¿Õ" : symStack.top()) << "'";
+        errMsg << "æ ˆé¡¶å¼‚å¸¸ï¼šè§£æ'" << nonTerminal << "'æ—¶ï¼Œé¢„æœŸ'" << nonTerminal
+               << "', å®é™…'" << (symStack.empty() ? "ç©º" : symStack.top()) << "'";
         throw runtime_error(errMsg.str());
     }
 
-    //4. µ¯³ö·ÇÖÕ½á·û£¬ÄæĞòÑ¹Èë²úÉúÊ½·ûºÅ£¨Õ»ºó½øÏÈ³ö£¬±£Ö¤½âÎöË³ĞòÕıÈ·£©
+    //4. å¼¹å‡ºéç»ˆç»“ç¬¦ï¼Œé€†åºå‹å…¥äº§ç”Ÿå¼ç¬¦å·ï¼ˆæ ˆåè¿›å…ˆå‡ºï¼Œä¿è¯è§£æé¡ºåºæ­£ç¡®ï¼‰
     symStack.pop();
-    // cerr << "[parseNonTerminal] µ¯³ö·ÇÖÕ½á·û: " << nonTerminal << endl;
 
     for (auto it = production.rbegin(); it != production.rend(); ++it) {
         if (!it->empty()) {
             symStack.push(*it);
-            // cerr << "[parseNonTerminal] Ñ¹Èë·ûºÅ: " << *it << "£¨ÊôÓÚ" << nonTerminal << "£©" << endl;
         }
     }
 }
 
 
-// Æ¥ÅäÖÕ½á·û£º¼ì²éµ±Ç°TokenÊÇ·ñÓëÔ¤ÆÚÒ»ÖÂ£¬Æ¥Åä³É¹¦ÔòÍÆ½øTokenÁ÷
+// åŒ¹é…ç»ˆç»“ç¬¦ï¼šæ£€æŸ¥å½“å‰Tokenæ˜¯å¦ä¸é¢„æœŸä¸€è‡´ï¼ŒåŒ¹é…æˆåŠŸåˆ™æ¨è¿›Tokenæµ
 void Parser::match(const string& expectedValue) {
-    //1. Éú³Éµ±Ç°TokenµÄ±êÊ¶£¨ÓëÔ¤ÆÚÖµ¸ñÊ½¶ÔÆë£©
+    //1. ç”Ÿæˆå½“å‰Tokençš„æ ‡è¯†ï¼ˆä¸é¢„æœŸå€¼æ ¼å¼å¯¹é½ï¼‰
     string currentTokenKey;
     if (currentToken.type == TokenType::KEYWORD) {
-        currentTokenKey = "KEYWORD(" + currentToken.value + ")";
+        string keywordValue = currentToken.value;
+        transform(keywordValue.begin(), keywordValue.end(), keywordValue.begin(), ::toupper);
+        currentTokenKey = "KEYWORD(" + keywordValue + ")";
     } else if (currentToken.type == TokenType::IDENTIFIER) {
         currentTokenKey = "IDENTIFIER";
-        //¼æÈİ´¦Àí1£ºÎŞÒıºÅ×Ö·û´®°´CONSTANTÆ¥Åä£¨Õë¶ÔINSERTÖµÁĞ±í£©
+        //å…¼å®¹å¤„ç†1ï¼šæ— å¼•å·å­—ç¬¦ä¸²æŒ‰CONSTANTåŒ¹é…ï¼ˆé’ˆå¯¹INSERTå€¼åˆ—è¡¨ï¼‰
         if (expectedValue == "CONSTANT") {
             currentTokenKey = "CONSTANT";
-        }
-        //¼æÈİ´¦Àí2£ºÀàĞÍ¹Ø¼ü×Ö£¨INT/STRING£©°´KEYWORDÆ¥Åä£¨Õë¶ÔCREATE TABLEÁĞÀàĞÍ£©
-        if (currentToken.value == "INT" || currentToken.value == "STRING") {
-            currentTokenKey = "KEYWORD(" + currentToken.value + ")";
         }
     } else if (currentToken.type == TokenType::CONSTANT) {
         currentTokenKey = "CONSTANT";
     } else if (currentToken.type == TokenType::OPERATOR) {
-        currentTokenKey = "OPERATOR";
+        // ç‰¹æ®Šå¤„ç†é€šé…ç¬¦*ï¼Œç¡®ä¿å®ƒè¢«æ­£ç¡®è¯†åˆ«ä¸ºSTARè€Œä¸æ˜¯OPERATOR
+        if (currentToken.value == "*") {
+            currentTokenKey = STAR;
+        } else {
+            currentTokenKey = "OPERATOR";
+        }
     } else if (currentToken.type == TokenType::DELIMITER) {
-        //Ó³Éä·Ö¸ô·ûµ½Í³Ò»³£Á¿£¨ÓëÔ¤²â±í·ûºÅÒ»ÖÂ£©
+        //æ˜ å°„åˆ†éš”ç¬¦åˆ°ç»Ÿä¸€å¸¸é‡ï¼ˆä¸é¢„æµ‹è¡¨ç¬¦å·ä¸€è‡´ï¼‰
         if (currentToken.value == "(") {
             currentTokenKey = LPAREN;
         } else if (currentToken.value == ")") {
@@ -214,138 +209,144 @@ void Parser::match(const string& expectedValue) {
     } else if (currentToken.type == TokenType::EOF_TOKEN) {
         currentTokenKey = "EOF";
     } else {
-        throw runtime_error("Î´ÖªTokenÀàĞÍ: " + to_string(static_cast<int>(currentToken.type)));
+        throw runtime_error("æœªçŸ¥Tokenç±»å‹: " + to_string(static_cast<int>(currentToken.type)));
     }
 
-    //2. ÌØÊâÆ¥Åä£ºÀàĞÍ¹Ø¼ü×Ö£¨INT/STRING£©Æ¥Åä"KEYWORD(TYPE)"
-    bool isTypeMatch = (expectedValue == "KEYWORD(TYPE)" &&
-                      (currentTokenKey == "KEYWORD(INT)"      || currentTokenKey == "KEYWORD(integer)" ||
-                       currentTokenKey == "KEYWORD(INTEGER)"  || currentTokenKey == "KEYWORD(int)" ||
-                       currentTokenKey == "KEYWORD(STRING)"   || currentTokenKey == "KEYWORD(string)" ||
-                       currentTokenKey == "KEYWORD(VARCHAR)"  || currentTokenKey == "KEYWORD(varchar)"));
+    //2. ä¿®æ”¹isTypeMatchæ¡ä»¶ï¼Œæ”¯æŒç±»å‹å…³é”®å­—çš„å¤§å°å†™ä¸æ•æ„ŸåŒ¹é…
+    bool isTypeMatch = false;
+
+    // æ£€æŸ¥æ˜¯å¦æ˜¯ç±»å‹å…³é”®å­—åŒ¹é…
+    if (expectedValue == "KEYWORD(TYPE)") {
+        isTypeMatch = (currentTokenKey == "KEYWORD(INT)" ||
+                      currentTokenKey == "KEYWORD(INTEGER)" ||
+                      currentTokenKey == "KEYWORD(STRING)" ||
+                      currentTokenKey == "KEYWORD(VARCHAR)" ||
+                      currentTokenKey == "KEYWORD(FLOAT)" ||
+                      currentTokenKey == "KEYWORD(BOOLEAN)");
+    }
+
+    // é¢å¤–æ”¯æŒç›´æ¥çš„ç±»å‹å…³é”®å­—åŒ¹é…ï¼ˆå¦‚"KEYWORD(INT)"ï¼‰
+    else if (expectedValue == "KEYWORD(INT)" || expectedValue == "KEYWORD(STRING)" ||
+             expectedValue == "KEYWORD(FLOAT)" || expectedValue == "KEYWORD(BOOLEAN)" ||
+             expectedValue == "KEYWORD(INTEGER)" || expectedValue == "KEYWORD(VARCHAR)") {
+        isTypeMatch = (currentTokenKey == expectedValue);
+    }
+
     if (!isTypeMatch && currentTokenKey != expectedValue) {
         stringstream errMsg;
-        errMsg << "Óï·¨´íÎó£ºÔ¤ÆÚ'" << expectedValue << "', Êµ¼Ê'" << currentTokenKey
-               << "'£¨ĞĞ: " << currentToken.line << ", ÁĞ: " << currentToken.column << "£©";
+        errMsg << "è¯­æ³•é”™è¯¯ï¼šé¢„æœŸ'" << expectedValue << "', å®é™…'" << currentTokenKey
+               << "'ï¼ˆè¡Œ: " << currentToken.line << ", åˆ—: " << currentToken.column << "ï¼‰";
         throw runtime_error(errMsg.str());
     }
 
-    //3. ÍÆ½øTokenÁ÷£¨ÎŞÂÛÊÇ·ñÆ¥Åä³É¹¦£¬Òì³£ÒÑÌáÇ°Å×³ö£©
-    string matchedValue = currentToken.value;
+    //3. æ¨è¿›Tokenæµï¼ˆæ— è®ºæ˜¯å¦åŒ¹é…æˆåŠŸï¼Œå¼‚å¸¸å·²æå‰æŠ›å‡ºï¼‰
     tokenPos++;
     currentToken = (tokenPos < tokens.size()) ? tokens[tokenPos] : Token(TokenType::EOF_TOKEN, "", -1, -1);
-
-    // //4. Êä³öÆ¥ÅäĞÅÏ¢£¨±ãÓÚµ÷ÊÔ£¬Çø·ÖÆÕÍ¨Æ¥ÅäºÍÀàĞÍÆ¥Åä£©
-    // if (isTypeMatch) {
-    //     cerr << "[match] ÀàĞÍÆ¥Åä: " << expectedValue << " <- " << matchedValue << endl;
-    // } else {
-    //     cerr << "[match] Æ¥Åä³É¹¦: " << expectedValue << " <- " << matchedValue << endl;
-    // }
 }
 
-//Óï¾ä½âÎöº¯Êı
+//è¯­å¥è§£æå‡½æ•°
 /**
- * ½âÎö³ÌĞòÈë¿Ú£ºProg ¡ú Stmt EOF
- * @return AST¸ù½Úµã£¨¶ÔÓ¦Ò»ÌõSQLÓï¾äµÄAST£©
+ * è§£æç¨‹åºå…¥å£ï¼šProg â†’ Stmt EOF
+ * @return ASTæ ¹èŠ‚ç‚¹ï¼ˆå¯¹åº”ä¸€æ¡SQLè¯­å¥çš„ASTï¼‰
  */
 unique_ptr<ASTNode> Parser::parseProg() {
     parseNonTerminal("Prog");
     unique_ptr<ASTNode> stmtAST = parseStmt();
 
-    //ÇåÀíStmt½âÎöºó¿ÉÄÜ²ĞÁôµÄ·ÇÖÕ½á·û£¨È·±£Õ»¶¥ÎªEOF£©
+    //æ¸…ç†Stmtè§£æåå¯èƒ½æ®‹ç•™çš„éç»ˆç»“ç¬¦ï¼ˆç¡®ä¿æ ˆé¡¶ä¸ºEOFï¼‰
     while (!symStack.empty()) {
         string top = symStack.top();
         if (top != "EOF") {
-            //½öµ¯³ö·ÇEOFµÄ²ĞÁô·ûºÅ£¨±ÜÃâÎóÉ¾EOF£©
+            //ä»…å¼¹å‡ºéEOFçš„æ®‹ç•™ç¬¦å·ï¼ˆé¿å…è¯¯åˆ EOFï¼‰
             symStack.pop();
-            cerr << "[parseProg] ÇåÀíStmt²ĞÁô·ûºÅ: " << top << endl;
         } else {
             break;
         }
     }
 
-    //Æ¥Åä½áÊø·ûEOF£¨È·±£Óï¾äÍêÕû£©
+    //åŒ¹é…ç»“æŸç¬¦EOFï¼ˆç¡®ä¿è¯­å¥å®Œæ•´ï¼‰
     if (!symStack.empty() && symStack.top() == "EOF") {
         match("EOF");
         symStack.pop();
     } else {
-        throw runtime_error("½âÎö½áÊøºóÕ»¶¥Ó¦Îª'EOF'");
+        throw runtime_error("è§£æç»“æŸåæ ˆé¡¶åº”ä¸º'EOF'");
     }
 
-    //ÖØĞÂÑ¹ÈëEOF£¬ÎªÏÂÒ»ÌõÓï¾ä½âÎö×ö×¼±¸£¨ÈôÓĞ£©
+    //é‡æ–°å‹å…¥EOFï¼Œä¸ºä¸‹ä¸€æ¡è¯­å¥è§£æåšå‡†å¤‡ï¼ˆè‹¥æœ‰ï¼‰
     symStack.push("EOF");
     return stmtAST;
 }
 
 /**
- * ½âÎöÓï¾ä·Ö·¢£ºStmt ¡ú CreateTable | Insert | Select
- * @return ¾ßÌåÓï¾äµÄAST½Úµã£¨CreateTableAST/InsertAST/SelectAST£©
+ * è§£æè¯­å¥åˆ†å‘ï¼šStmt â†’ CreateTable | Insert | Select
+ * @return å…·ä½“è¯­å¥çš„ASTèŠ‚ç‚¹ï¼ˆCreateTableAST/InsertAST/SelectASTï¼‰
  */
 unique_ptr<ASTNode> Parser::parseStmt() {
     parseNonTerminal("Stmt");
     unique_ptr<ASTNode> resultAST;
 
-    // ¸ù¾İÓï·¨Õ»¶¥·ûºÅ£¬·Ö·¢µ½¶ÔÓ¦Óï¾äµÄ½âÎöº¯Êı
+    // æ ¹æ®è¯­æ³•æ ˆé¡¶ç¬¦å·ï¼Œåˆ†å‘åˆ°å¯¹åº”è¯­å¥çš„è§£æå‡½æ•°
     if (!symStack.empty() && symStack.top() == "CreateTable") {
         resultAST = parseCreateTable();
     } else if (!symStack.empty() && symStack.top() == "Insert") {
         resultAST = parseInsert();
     } else if (!symStack.empty() && symStack.top() == "Select") {
         resultAST = parseSelect();
+    } else if (!symStack.empty() && symStack.top() == "Delete") {
+        resultAST = parseDelete();
     } else {
-        throw runtime_error("Î´ÖªÓï¾äÀàĞÍ£ºÕ»¶¥Îª'" + (symStack.empty() ? "¿Õ" : symStack.top()) + "'");
+        throw runtime_error("æœªçŸ¥è¯­å¥ç±»å‹ï¼šæ ˆé¡¶ä¸º'" + (symStack.empty() ? "ç©º" : symStack.top()) + "'");
     }
     return resultAST;
 }
 
 /**
- * ½âÎöSELECTÓï¾ä£ºÉú³ÉSelectAST½Úµã
- * Ö§³Ö£º¶àÁĞ²éÑ¯¡¢Í¨Åä·û*¡¢WHERE×Ó¾äÌõ¼ş
- * @return SelectAST½Úµã£¨°üº¬²éÑ¯ÁĞ¡¢±íÃû¡¢WHEREÌõ¼ş£©
+ * è§£æSELECTè¯­å¥ï¼šç”ŸæˆSelectASTèŠ‚ç‚¹
+ * æ”¯æŒï¼šå¤šåˆ—æŸ¥è¯¢ã€é€šé…ç¬¦*ã€WHEREå­å¥æ¡ä»¶
+ * @return SelectASTèŠ‚ç‚¹ï¼ˆåŒ…å«æŸ¥è¯¢åˆ—ã€è¡¨åã€WHEREæ¡ä»¶ï¼‰
  */
 unique_ptr<SelectAST> Parser::parseSelect() {
     parseNonTerminal("Select");
 
-    //1. Æ¥ÅäSELECT¹Ø¼ü×Ö
+    //1. åŒ¹é…SELECTå…³é”®å­—
     match("KEYWORD(SELECT)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(SELECT)") {
         symStack.pop();
     }
 
-    //2. ½âÎö²éÑ¯ÁĞÁĞ±í£¨Èç "name, age" »ò "*"£©
+    //2. è§£ææŸ¥è¯¢åˆ—åˆ—è¡¨ï¼ˆå¦‚ "name, age" æˆ– "*"ï¼‰
     vector<string> selectCols = parseSelectColumns();
 
-    //3. Æ¥ÅäFROM¹Ø¼ü×Ö£¨È·±£Óï·¨½á¹¹ÕıÈ·£©
+    //3. åŒ¹é…FROMå…³é”®å­—ï¼ˆç¡®ä¿è¯­æ³•ç»“æ„æ­£ç¡®ï¼‰
     if (symStack.empty() || symStack.top() != "KEYWORD(FROM)") {
-        // ÇåÀíÕ»ÖĞÊ£ÓàµÄSelectColumns'·ûºÅ
+        // æ¸…ç†æ ˆä¸­å‰©ä½™çš„SelectColumns'ç¬¦å·
         while (!symStack.empty() && symStack.top() == "SelectColumns'") {
             symStack.pop();
         }
         if (symStack.empty() || symStack.top() != "KEYWORD(FROM)") {
-            // debugState();
-            throw runtime_error("SELECTÓï¾äÓï·¨´íÎó£ºÔ¤ÆÚ'FROM'¹Ø¼ü×Ö");
+            throw runtime_error("SELECTè¯­å¥è¯­æ³•é”™è¯¯ï¼šé¢„æœŸ'FROM'å…³é”®å­—");
         }
     }
     match("KEYWORD(FROM)");
     symStack.pop();
 
-    //4. ½âÎö²éÑ¯±íÃû
+    //4. è§£ææŸ¥è¯¢è¡¨å
     string tableName = currentToken.value;
     match("IDENTIFIER");
     if (!symStack.empty() && symStack.top() == "IDENTIFIER") {
         symStack.pop();
     }
 
-    //5. ½âÎöWHERE×Ó¾ä£¨¿ÉÑ¡£¬ÎŞWHEREÊ±·µ»Ø¿Õ£©
+    //5. è§£æWHEREå­å¥ï¼ˆå¯é€‰ï¼Œæ— WHEREæ—¶è¿”å›ç©ºï¼‰
     optional<Condition> condition = parseWhereClause();
 
-    //6. Æ¥ÅäÓï¾ä½áÊø·ÖºÅ
+    //6. åŒ¹é…è¯­å¥ç»“æŸåˆ†å·
     match("SEMICOLON");
     if (!symStack.empty() && symStack.top() == "SEMICOLON") {
         symStack.pop();
     }
 
-    //¹¹½¨SelectAST²¢·µ»Ø
+    //æ„å»ºSelectASTå¹¶è¿”å›
     auto ast = make_unique<SelectAST>();
     ast->columns = selectCols;
     ast->tableName = tableName;
@@ -354,60 +355,60 @@ unique_ptr<SelectAST> Parser::parseSelect() {
 }
 
 /**
- * ½âÎöINSERTÓï¾ä£ºÉú³ÉInsertAST½Úµã
- * Ö§³Ö£º¶àÖµ²åÈë£¬¼æÈİ´øÒıºÅ/ÎŞÒıºÅ×Ö·û´®³£Á¿
- * @return InsertAST½Úµã£¨°üº¬Ä¿±ê±íÃû¡¢²åÈëÖµÁĞ±í£©
+ * è§£æINSERTè¯­å¥ï¼šç”ŸæˆInsertASTèŠ‚ç‚¹
+ * æ”¯æŒï¼šå¤šå€¼æ’å…¥ï¼Œå…¼å®¹å¸¦å¼•å·/æ— å¼•å·å­—ç¬¦ä¸²å¸¸é‡
+ * @return InsertASTèŠ‚ç‚¹ï¼ˆåŒ…å«ç›®æ ‡è¡¨åã€æ’å…¥å€¼åˆ—è¡¨ï¼‰
  */
 unique_ptr<InsertAST> Parser::parseInsert() {
     parseNonTerminal("Insert");
 
-    //1. Æ¥ÅäINSERT¹Ø¼ü×Ö
+    // åŒ¹é…INSERTå…³é”®å­—
     match("KEYWORD(INSERT)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(INSERT)") {
         symStack.pop();
     }
 
-    //2. Æ¥ÅäINTO¹Ø¼ü×Ö
+    // åŒ¹é…INTOå…³é”®å­—
     match("KEYWORD(INTO)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(INTO)") {
         symStack.pop();
     }
 
-    //3. ½âÎöÄ¿±ê±íÃû
+    // è§£æç›®æ ‡è¡¨å
     string tableName = currentToken.value;
     match("IDENTIFIER");
     if (!symStack.empty() && symStack.top() == "IDENTIFIER") {
         symStack.pop();
     }
 
-    //4. Æ¥ÅäVALUES¹Ø¼ü×Ö
+    // åŒ¹é…VALUESå…³é”®å­—
     match("KEYWORD(VALUES)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(VALUES)") {
         symStack.pop();
     }
 
-    //5. Æ¥Åä×óÀ¨ºÅ£¨ÖµÁĞ±í¿ªÊ¼£©
+    // åŒ¹é…å·¦æ‹¬å·ï¼ˆå€¼åˆ—è¡¨å¼€å§‹ï¼‰
     match(LPAREN);
     if (!symStack.empty() && symStack.top() == LPAREN) {
         symStack.pop();
     }
 
-    //6. ½âÎö²åÈëÖµÁĞ±í£¨Èç "'Alice', 20"£©
+    // è§£ææ’å…¥å€¼åˆ—è¡¨
     vector<string> values = parseValueList();
 
-    //7. Æ¥ÅäÓÒÀ¨ºÅ£¨ÖµÁĞ±í½áÊø£©
+    // åŒ¹é…å³æ‹¬å·ï¼ˆå€¼åˆ—è¡¨ç»“æŸï¼‰
     match(RPAREN);
     if (!symStack.empty() && symStack.top() == RPAREN) {
         symStack.pop();
     }
 
-    //8. Æ¥ÅäÓï¾ä½áÊø·ÖºÅ
+    // åŒ¹é…è¯­å¥ç»“æŸåˆ†å·
     match("SEMICOLON");
     if (!symStack.empty() && symStack.top() == "SEMICOLON") {
         symStack.pop();
     }
 
-    //¹¹½¨InsertAST²¢·µ»Ø
+    // æ„å»ºInsertASTå¹¶è¿”å›
     auto ast = make_unique<InsertAST>();
     ast->tableName = tableName;
     ast->values = values;
@@ -415,111 +416,64 @@ unique_ptr<InsertAST> Parser::parseInsert() {
 }
 
 /**
- * ½âÎöCREATE TABLEÓï¾ä£ºÉú³ÉCreateTableAST½Úµã
- * Ö§³Ö¶àÁĞ¶¨Òå£¬ÁĞÀàĞÍÎªSTRING/INT
- * @return CreateTableAST½Úµã£¨°üº¬±íÃû¡¢ÁĞÁĞ±í£©
+ * è§£æCREATE TABLEè¯­å¥ï¼šç”ŸæˆCreateTableASTèŠ‚ç‚¹
+ * æ”¯æŒå¤šåˆ—å®šä¹‰ï¼Œåˆ—ç±»å‹ä¸ºSTRING/INT
+ * @return CreateTableASTèŠ‚ç‚¹ï¼ˆåŒ…å«è¡¨åã€åˆ—åˆ—è¡¨ï¼‰
  */
 unique_ptr<CreateTableAST> Parser::parseCreateTable() {
-    // cerr << "\n[CREATE TABLE] ¿ªÊ¼½âÎöCREATE TABLEÓï¾ä" << endl;
     parseNonTerminal("CreateTable");
 
-    // 1. Æ¥ÅäCREATE¹Ø¼ü×Ö
+    // åŒ¹é…CREATEå…³é”®å­—
     match("KEYWORD(CREATE)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(CREATE)") {
         symStack.pop();
     }
-    // cerr << "[CREATE TABLE] Íê³ÉCREATE¹Ø¼ü×ÖÆ¥Åä£¬ÏÂÒ»¸öToken: " << currentToken.value << endl;
 
-    // 2. Æ¥ÅäTABLE¹Ø¼ü×Ö
+    // åŒ¹é…TABLEå…³é”®å­—
     match("KEYWORD(TABLE)");
     if (!symStack.empty() && symStack.top() == "KEYWORD(TABLE)") {
         symStack.pop();
     }
-    // cerr << "[CREATE TABLE] Íê³ÉTABLE¹Ø¼ü×ÖÆ¥Åä£¬ÏÂÒ»¸öToken: " << currentToken.value << endl;
 
-    // 3. ½âÎö±íÃû£¨Èç "Students"£©
+    // è·å–è¡¨å
     string tableName = currentToken.value;
     match("IDENTIFIER");
     if (!symStack.empty() && symStack.top() == "IDENTIFIER") {
         symStack.pop();
     }
-    // cerr << "[CREATE TABLE] Íê³É±íÃûÆ¥Åä: " << tableName << "£¬ÏÂÒ»¸öToken: " << currentToken.value << endl;
 
-    // 4. Æ¥Åä×óÀ¨ºÅ£¨ÁĞÁĞ±í¿ªÊ¼£©
+    // åŒ¹é…å·¦æ‹¬å·
     match(LPAREN);
     if (!symStack.empty() && symStack.top() == LPAREN) {
         symStack.pop();
     }
-    // cerr << "[CREATE TABLE] Íê³É×óÀ¨ºÅÆ¥Åä£¬ÏÂÒ»¸öToken: " << currentToken.value << endl;
 
-    // 5. ½âÎöÁĞÁĞ±í£¨ºËĞÄ²½Öè£º´¦ÀíÕ»×´Ì¬¸ÉÈÅ£©
-    vector<Column> columns;
-    stack<string> tempStack; // ÁÙÊ±Õ»£º±£´æColumnListÖ®ÉÏµÄ¸ÉÈÅ·ûºÅ£¨RPAREN/SEMICOLON£©
-    try {
-        // ÁÙÊ±ÒÆ³öColumnListÖ®ÉÏµÄ·ûºÅ£¬È·±£ÁĞÁĞ±í½âÎöÊ±Õ»¶¥½öÎªColumnListÏà¹Ø·ûºÅ
-        while (!symStack.empty() && symStack.top() != "ColumnList") {
-            tempStack.push(symStack.top());
-            symStack.pop();
-        }
-        // ½öÔÚÓĞÒÆ³ö·ûºÅÊ±´òÓ¡ÈÕÖ¾£¨±ÜÃâÈßÓà£©
-        if (!tempStack.empty()) {
-            // cerr << "[CREATE TABLE] ÁÙÊ±ÒÆ³ö¸ÉÈÅ·ûºÅ: " << tempStack.size() << "¸ö" << endl;
-        }
+    // è§£æåˆ—åˆ—è¡¨
+    vector<Column> columns = parseColumnList();
 
-        // ½âÎöÁĞÁĞ±í£¨Éú³ÉÁĞÃûºÍÀàĞÍµÄ¶ÔÓ¦¹ØÏµ£©
-        columns = parseColumnList();
-        // cerr << "[CREATE TABLE] ÁĞÁĞ±í½âÎöÍê³É£¬¹²" << columns.size() << "ÁĞ" << endl;
-
-        // »Ö¸´ÁÙÊ±ÒÆ³öµÄ·ûºÅ£¨RPAREN/SEMICOLON£©£¬¼ÌĞøºóĞøÆ¥Åä
-        while (!tempStack.empty()) {
-            symStack.push(tempStack.top());
-            tempStack.pop();
-        }
-        if (!tempStack.empty()) {
-            // cerr << "[CREATE TABLE] »Ö¸´·ûºÅºóÕ»¶¥: " << symStack.top() << endl;
-        }
-
-    } catch (const exception& e) {
-        // cerr << "[CREATE TABLE] ÁĞÁĞ±í½âÎöÊ§°Ü: " << e.what() << endl;
-        throw; // ÖØĞÂÅ×³öÒì³££¬ÈÃÉÏ²ã´¦Àí
-    }
-
-    // 6. Æ¥ÅäÓÒÀ¨ºÅ£¨ÁĞÁĞ±í½áÊø£©
+    // åŒ¹é…å³æ‹¬å·
     match(RPAREN);
     if (!symStack.empty() && symStack.top() == RPAREN) {
         symStack.pop();
     }
-    // cerr << "[CREATE TABLE] Íê³ÉÓÒÀ¨ºÅÆ¥Åä" << endl;
 
-    // 7. Æ¥ÅäÓï¾ä½áÊø·ÖºÅ
+    // åŒ¹é…åˆ†å·
     match("SEMICOLON");
     if (!symStack.empty() && symStack.top() == "SEMICOLON") {
         symStack.pop();
     }
-    // cerr << "[CREATE TABLE] Íê³É·ÖºÅÆ¥Åä" << endl;
 
-    // ¹Ø¼üĞŞ¸´£ºÇåÀíCREATE TABLEÏà¹ØµÄ²ĞÁôÕ»·ûºÅ£¨È·±£Õ»¶¥½ö±£ÁôEOF£©
-    while (!symStack.empty()) {
-        string top = symStack.top();
-        if (top == "CreateTable" || top == "RPAREN" || top == "SEMICOLON") {
-            symStack.pop();
-            // cerr << "[CREATE TABLE] ÇåÀí²ĞÁô·ûºÅ: " << top << endl;
-        } else {
-            break;
-        }
-    }
-
-    // ¹¹½¨CreateTableAST²¢·µ»Ø
+    // åˆ›å»ºASTèŠ‚ç‚¹
     auto ast = make_unique<CreateTableAST>();
     ast->tableName = tableName;
     ast->columns = columns;
     return ast;
 }
 
-//ÁĞ±í½âÎöº¯Êı
+//åˆ—è¡¨è§£æå‡½æ•°
 /**
- * ½âÎö²éÑ¯ÁĞÁĞ±í£¨SELECTÓÃ£©£ºÈç "name, age" »ò "*"
- * @return ²éÑ¯ÁĞÃû³ÆÁĞ±í£¨Èç ["name", "age"] »ò ["*"]£©
+ * è§£ææŸ¥è¯¢åˆ—åˆ—è¡¨ï¼ˆSELECTç”¨ï¼‰ï¼šå¦‚ "name, age" æˆ– "*"
+ * @return æŸ¥è¯¢åˆ—åç§°åˆ—è¡¨ï¼ˆå¦‚ ["name", "age"] æˆ– ["*"]ï¼‰
  */
 vector<string> Parser::parseSelectColumns() {
     parseNonTerminal("SelectColumns");
@@ -527,25 +481,26 @@ vector<string> Parser::parseSelectColumns() {
     bool parsingComplete = false;
 
     while (!symStack.empty() && !parsingComplete) {
-        // Óöµ½FROM¹Ø¼ü×ÖÊ±£¬½áÊø²éÑ¯ÁĞ½âÎö
-        if (currentToken.type == TokenType::KEYWORD && currentToken.value == "FROM") {
+        // é‡åˆ°FROMå…³é”®å­—æ—¶ï¼Œç»“æŸæŸ¥è¯¢åˆ—è§£æ
+        if (currentToken.type == TokenType::KEYWORD &&
+            (currentToken.value == "FROM" || currentToken.value == "from")) {
             parsingComplete = true;
             break;
         }
 
         string stackTop = symStack.top();
         if (stackTop == STAR) {
-            // Æ¥ÅäÍ¨Åä·û*£¨²éÑ¯ËùÓĞÁĞ£©
+            // åŒ¹é…é€šé…ç¬¦*ï¼ˆæŸ¥è¯¢æ‰€æœ‰åˆ—ï¼‰
             columns.push_back("*");
             match(STAR);
             symStack.pop();
         } else if (stackTop == "IDENTIFIER") {
-            // Æ¥Åä¾ßÌåÁĞÃû£¨Èç "name"¡¢"age"£©
+            // åŒ¹é…å…·ä½“åˆ—åï¼ˆå¦‚ "name"ã€"age"ï¼‰
             columns.push_back(currentToken.value);
             match("IDENTIFIER");
             symStack.pop();
         } else if (stackTop == "SelectColumns'") {
-            // ´¦Àíµİ¹é²¿·Ö£¨¶ººÅ·Ö¸ôµÄºóĞøÁĞ£©
+            // å¤„ç†é€’å½’éƒ¨åˆ†ï¼ˆé€—å·åˆ†éš”çš„åç»­åˆ—ï¼‰
             symStack.pop();
             parseSelectColumnsPrime();
             if (!symStack.empty() && symStack.top() == COMMA) {
@@ -553,12 +508,12 @@ vector<string> Parser::parseSelectColumns() {
                 symStack.pop();
             }
         } else {
-            // ÆäËû·ûºÅ£¨Èç·ÖºÅ£©£¬½áÊø½âÎö
+            // å…¶ä»–ç¬¦å·ï¼ˆå¦‚åˆ†å·ï¼‰ï¼Œç»“æŸè§£æ
             parsingComplete = true;
         }
     }
 
-    // ÇåÀíÕ»ÖĞÊ£ÓàµÄSelectColumns'·ûºÅ
+    // æ¸…ç†æ ˆä¸­å‰©ä½™çš„SelectColumns'ç¬¦å·
     while (!symStack.empty() && symStack.top() == "SelectColumns'") {
         symStack.pop();
     }
@@ -566,8 +521,8 @@ vector<string> Parser::parseSelectColumns() {
 }
 
 /**
- * ½âÎöÖµÁĞ±í£¨INSERTÓÃ£©£ºÈç "'Alice', 20"
- * @return ²åÈëÖµ×Ö·û´®ÁĞ±í£¨Èç ["Alice", "20"]£©
+ * è§£æå€¼åˆ—è¡¨ï¼ˆINSERTç”¨ï¼‰ï¼šå¦‚ "'Alice', 20"
+ * @return æ’å…¥å€¼å­—ç¬¦ä¸²åˆ—è¡¨ï¼ˆå¦‚ ["'Alice'", "20"]ï¼‰
  */
 vector<string> Parser::parseValueList() {
     parseNonTerminal("ValueList");
@@ -575,21 +530,61 @@ vector<string> Parser::parseValueList() {
 
     while (!symStack.empty()) {
         string stackTop = symStack.top();
+
         if (stackTop == "CONSTANT") {
-            // Æ¥Åä³£Á¿£¨´øÒıºÅ×Ö·û´®/Êı×Ö/ÎŞÒıºÅ×Ö·û´®£©
-            values.push_back(currentToken.value);
+            // åœ¨matchä¹‹å‰å…ˆä¿å­˜å½“å‰Tokençš„å€¼ï¼Œå› ä¸ºmatchä¼šæ¨è¿›tokenæµ
+            string value = currentToken.value;
+
+            // ç¡®ä¿å­—ç¬¦ä¸²å¸¸é‡ä¿ç•™å¼•å·
+            // æ£€æŸ¥æ˜¯å¦æ˜¯å­—ç¬¦ä¸²å¸¸é‡ï¼ˆè¯æ³•åˆ†æå™¨åº”è¯¥å·²ç»åŠ ä¸Šå¼•å·ï¼‰
+            bool isString = !value.empty() && ((value.front() == '"' && value.back() == '"') ||
+                                             (value.front() == '\'' && value.back() == '\''));
+
+            // å¦‚æœä¸æ˜¯å·²å¸¦å¼•å·çš„å­—ç¬¦ä¸²ï¼Œä½†è¯æ³•åˆ†æå™¨è¯†åˆ«ä¸ºCONSTANTï¼Œéœ€è¦åˆ¤æ–­æ˜¯å¦æ·»åŠ å¼•å·
+            if (!isString && currentToken.type == TokenType::CONSTANT) {
+                // æ£€æŸ¥æ˜¯å¦ä¸ºçº¯æ•°å­—ï¼ˆåŒ…æ‹¬å°æ•°ï¼‰
+                bool isNumeric = true;
+                bool hasDot = false;
+                for (size_t i = 0; i < value.length(); ++i) {
+                    char c = value[i];
+                    if (c == '.' && !hasDot) {
+                        hasDot = true;
+                    } else if (c == '-' && i == 0) {
+                        // è´Ÿå·åœ¨å¼€å¤´æ˜¯å…è®¸çš„
+                    } else if (!isdigit(c)) {
+                        isNumeric = false;
+                        break;
+                    }
+                }
+
+                // å¦‚æœä¸æ˜¯æ•°å­—ï¼Œåˆ™è®¤ä¸ºæ˜¯å­—ç¬¦ä¸²å¸¸é‡ï¼Œéœ€è¦æ·»åŠ å¼•å·
+                if (!isNumeric) {
+                    value = "'" + value + "'";
+                }
+                // å¦‚æœæ˜¯æ•°å­—ï¼Œä¿æŒåŸæ ·ä¸æ·»åŠ å¼•å·
+            }
+
+            values.push_back(value);
+
             match("CONSTANT");
-            symStack.pop();
-        } else if (stackTop == "ValueList'") {
-            // ´¦Àíµİ¹é²¿·Ö£¨¶ººÅ·Ö¸ôµÄºóĞøÖµ£©
-            symStack.pop();
-            parseValueListPrime();
+            if (!symStack.empty() && symStack.top() == "CONSTANT") {
+                symStack.pop();
+            }
+        }
+        else if (stackTop == "ValueList'") {
+            parseNonTerminal("ValueList'");
+
+            // æ£€æŸ¥æ˜¯å¦æœ‰é€—å·åˆ†éš”çš„æ›´å¤šå€¼
             if (!symStack.empty() && symStack.top() == COMMA) {
                 match(COMMA);
                 symStack.pop();
+            } else {
+                // æ²¡æœ‰æ›´å¤šå€¼ï¼Œç»“æŸè§£æ
+                break;
             }
-        } else {
-            // ÆäËû·ûºÅ£¨ÈçÓÒÀ¨ºÅ£©£¬½áÊø½âÎö
+        }
+        else {
+            // é‡åˆ°å…¶ä»–ç¬¦å·ï¼Œç»“æŸè§£æ
             break;
         }
     }
@@ -598,69 +593,75 @@ vector<string> Parser::parseValueList() {
 }
 
 /**
- * ½âÎöÁĞÁĞ±í£¨CREATE TABLEÓÃ£©£ºÈç "name STRING, age INT"
- * @return ÁĞĞÅÏ¢ÁĞ±í£¨°üº¬Ã¿¸öÁĞµÄÃû³ÆºÍÀàĞÍ£©
+ * è§£æåˆ—åˆ—è¡¨ï¼ˆCREATE TABLEç”¨ï¼‰ï¼šå¦‚ "name STRING, age INT"
+ * @return åˆ—ä¿¡æ¯åˆ—è¡¨ï¼ˆåŒ…å«æ¯ä¸ªåˆ—çš„åç§°å’Œç±»å‹ï¼‰
  */
 vector<Column> Parser::parseColumnList() {
     parseNonTerminal("ColumnList");
     vector<Column> columns;
-    bool parsingActive = true;
 
-    while (!symStack.empty() && parsingActive) {
+    while (!symStack.empty()) {
         string stackTop = symStack.top();
-        // cerr << "[ColumnList] Õ»¶¥·ûºÅ: " << stackTop << ", µ±Ç°Token: " << currentToken.value << endl;
 
         if (stackTop == "Column") {
-            // ½âÎöµ¥¸öÁĞ£¨ÁĞÃû + ÀàĞÍ£©
-            Column currentCol;
-            parseNonTerminal("Column");  // Ñ¹Èë "IDENTIFIER" + "KEYWORD(TYPE)"
+            // è§£æåˆ—å®šä¹‰
+            Column col;
 
-            // Æ¥ÅäÁĞÃû£¨Èç "name"¡¢"age"£©
-            currentCol.name = currentToken.value;
-            match("IDENTIFIER");
+            // å¼¹å‡ºColumnï¼Œè§£æå…¶äº§ç”Ÿå¼
             symStack.pop();
-            // cerr << "[ColumnList] ½âÎöÁĞÃû: " << currentCol.name << endl;
 
-            // Æ¥ÅäÁĞÀàĞÍ£¨Èç "STRING"¡¢"INT"£¬ÓÉmatch´¦ÀíÀàĞÍÆ¥Åä£©
-            currentCol.type = currentToken.value;
-            match("KEYWORD(TYPE)");
-            symStack.pop();
-            // cerr << "[ColumnList] ½âÎöÁĞÀàĞÍ: " << currentCol.type << endl;
-
-            // ½«µ±Ç°ÁĞÌí¼Óµ½ÁĞ±í
-            columns.push_back(currentCol);
-
-        } else if (stackTop == "ColumnList'") {
-            // ½âÎöµİ¹é²¿·Ö£¨´¦Àí¶ººÅ·Ö¸ôµÄºóĞøÁĞ£©
-            parseColumnListPrime();
-            if (!symStack.empty() && symStack.top() == COMMA) {
-                // Æ¥Åä¶ººÅ£¬¼ÌĞø½âÎöÏÂÒ»ÁĞ
-                match(COMMA);
-                symStack.pop();
-                // cerr << "[ColumnList] Æ¥Åä¶ººÅ£¬×¼±¸½âÎöÏÂÒ»ÁĞ" << endl;
-            } else {
-                // ¿Õ²úÉúÊ½£¨Óöµ½ÓÒÀ¨ºÅ£©£¬µ¯³öµ±Ç°ColumnList'²¢½áÊøµİ¹é
-                symStack.pop();
-                parsingActive = false;
+            // è·å–åˆ—å - å½“å‰Tokenåº”è¯¥æ˜¯IDENTIFIERç±»å‹
+            if (currentToken.type == TokenType::IDENTIFIER) {
+                col.name = currentToken.value;
+                match("IDENTIFIER");
+                if (!symStack.empty() && symStack.top() == "IDENTIFIER") {
+                    symStack.pop();
+                }
             }
 
-        } else if (stackTop == "ColumnList") {
-            // ·ÀÖ¹Â©½âÎö£¬Ö÷¶¯µ¯³öColumnList·ûºÅ
-            symStack.pop();
+            // è·å–åˆ—ç±»å‹ - å½“å‰Tokenåº”è¯¥æ˜¯ç±»å‹å…³é”®å­—
+            if (currentToken.type == TokenType::KEYWORD) {
+                // ä¿å­˜ç±»å‹å€¼ï¼ˆåœ¨matchä¹‹å‰ï¼‰
+                string typeValue = currentToken.value;
 
-        } else {
-            // ·ÇÁĞÏà¹Ø·ûºÅ£¨ÈçÓÒÀ¨ºÅ£©£¬½áÊø½âÎö
-            parsingActive = false;
+                // å°†å€¼è½¬æ¢ä¸ºå¤§å†™è¿›è¡Œæ¯”è¾ƒï¼Œç¡®ä¿å¤§å°å†™ä¸æ•æ„Ÿ
+                string upperTypeValue = typeValue;
+                transform(upperTypeValue.begin(), upperTypeValue.end(), upperTypeValue.begin(), ::toupper);
+
+                // ä½¿ç”¨å¤§å†™å½¢å¼çš„ç±»å‹
+                col.type = upperTypeValue;
+
+                // åŒ¹é…ç±»å‹å…³é”®å­—
+                match("KEYWORD(TYPE)");
+
+                if (!symStack.empty() && symStack.top() == "KEYWORD(TYPE)") {
+                    symStack.pop();
+                }
+            }
+
+            columns.push_back(col);
         }
-    }
-
-    // ¹Ø¼üĞŞ¸´£ºÇ¿ÖÆÇåÀíÁĞÁĞ±íÏà¹Ø²ĞÁô·ûºÅ£¨È·±£Õ»ÖĞÎŞColumnList/ColumnList'£©
-    while (!symStack.empty()) {
-        string top = symStack.top();
-        if (top == "ColumnList" || top == "ColumnList'") {
+        else if (stackTop == "ColumnList'") {
+            // å¤„ç†é€’å½’éƒ¨åˆ†ï¼ˆé€—å·åˆ†éš”çš„åç»­åˆ—ï¼‰
             symStack.pop();
-            // cerr << "[ColumnList] ÇåÀí²ĞÁô·ûºÅ: " << top << endl;
-        } else {
+            parseColumnListPrime();
+
+            // æ£€æŸ¥å¹¶åŒ¹é…é€—å·
+            if (!symStack.empty() && symStack.top() == COMMA) {
+                match(COMMA);
+                symStack.pop();
+            }
+        }
+        else if (stackTop == "ColumnList") {
+            // å¼¹å‡ºå·²å¤„ç†çš„ColumnList
+            symStack.pop();
+        }
+        else if (stackTop == RPAREN) {
+            // é‡åˆ°å³æ‹¬å·ï¼Œç»“æŸè§£æ
+            break;
+        }
+        else {
+            // é‡åˆ°å…¶ä»–ç¬¦å·ï¼Œç»“æŸè§£æ
             break;
         }
     }
@@ -668,23 +669,30 @@ vector<Column> Parser::parseColumnList() {
     return columns;
 }
 
-//¸¨Öú½âÎöº¯Êı£¨µİ¹é²¿·Ö
+//è¾…åŠ©è§£æå‡½æ•°ï¼ˆé€’å½’éƒ¨åˆ†
 /**
- * ½âÎö²éÑ¯ÁĞÁĞ±íµİ¹é²¿·Ö£ºSelectColumns' ¡ú , IDENTIFIER SelectColumns' | ¦Å
+ * è§£ææŸ¥è¯¢åˆ—åˆ—è¡¨é€’å½’éƒ¨åˆ†ï¼šSelectColumns' â†’ , IDENTIFIER SelectColumns' | Îµ
  */
 void Parser::parseSelectColumnsPrime() {
-    // Éú³Éµ±Ç°TokenµÄ±êÊ¶£¨ÓÃÓÚ²éÑ¯Ô¤²â±í£©
-    string currentTokenKey = (currentToken.type == TokenType::DELIMITER && currentToken.value == ",")
-        ? "," : (currentToken.type == TokenType::KEYWORD && currentToken.value == "FROM") ? "FROM" : currentToken.value;
+    // ç”Ÿæˆå½“å‰Tokençš„æ ‡è¯†ï¼ˆç”¨äºæŸ¥è¯¢é¢„æµ‹è¡¨ï¼‰
+    string currentTokenKey;
+    if (currentToken.type == TokenType::DELIMITER && currentToken.value == ",") {
+        currentTokenKey = ",";
+    } else if (currentToken.type == TokenType::KEYWORD &&
+              (currentToken.value == "FROM" || currentToken.value == "from")) {
+        currentTokenKey = "KEYWORD(FROM)";
+    } else {
+        currentTokenKey = currentToken.value;
+    }
 
-    // ¹¹½¨Ô¤²â±í²éÑ¯¼ü
+    // æ„å»ºé¢„æµ‹è¡¨æŸ¥è¯¢é”®
     string tableKey = "SelectColumns'|" + currentTokenKey;
     if (predictTable.find(tableKey) == predictTable.end()) {
-        throw runtime_error("ÎŞÆ¥ÅäµÄSelectColumns'²úÉúÊ½£º" + tableKey);
+        throw runtime_error("æ— åŒ¹é…çš„SelectColumns'äº§ç”Ÿå¼ï¼š" + tableKey);
     }
     vector<string> production = predictTable[tableKey];
 
-    // ÄæĞòÑ¹Èë²úÉúÊ½·ûºÅ£¨Õ»ºó½øÏÈ³ö£©
+    // é€†åºå‹å…¥äº§ç”Ÿå¼ç¬¦å·ï¼ˆæ ˆåè¿›å…ˆå‡ºï¼‰
     for (auto it = production.rbegin(); it != production.rend(); ++it) {
         if (!it->empty()) {
             symStack.push(*it);
@@ -693,21 +701,21 @@ void Parser::parseSelectColumnsPrime() {
 }
 
 /**
- * ½âÎöÖµÁĞ±íµİ¹é²¿·Ö£ºValueList' ¡ú , CONSTANT ValueList' | ¦Å
+ * è§£æå€¼åˆ—è¡¨é€’å½’éƒ¨åˆ†ï¼šValueList' â†’ , CONSTANT ValueList' | Îµ
  */
 void Parser::parseValueListPrime() {
-    // Éú³Éµ±Ç°TokenµÄ±êÊ¶£¨ÓÃÓÚ²éÑ¯Ô¤²â±í£©
+    // ç”Ÿæˆå½“å‰Tokençš„æ ‡è¯†ï¼ˆç”¨äºæŸ¥è¯¢é¢„æµ‹è¡¨ï¼‰
     string currentTokenKey = (currentToken.type == TokenType::DELIMITER && currentToken.value == ",")
         ? "," : (currentToken.type == TokenType::DELIMITER && currentToken.value == ")") ? ")" : currentToken.value;
 
-    // ¹¹½¨Ô¤²â±í²éÑ¯¼ü
+    // æ„å»ºé¢„æµ‹è¡¨æŸ¥è¯¢é”®
     string tableKey = "ValueList'|" + currentTokenKey;
     if (predictTable.find(tableKey) == predictTable.end()) {
-        throw runtime_error("ÎŞÆ¥ÅäµÄValueList'²úÉúÊ½£º" + tableKey);
+        throw runtime_error("æ— åŒ¹é…çš„ValueList'äº§ç”Ÿå¼ï¼š" + tableKey);
     }
     vector<string> production = predictTable[tableKey];
 
-    // ÄæĞòÑ¹Èë²úÉúÊ½·ûºÅ£¨Õ»ºó½øÏÈ³ö£©
+    // é€†åºå‹å…¥äº§ç”Ÿå¼ç¬¦å·ï¼ˆæ ˆåè¿›å…ˆå‡ºï¼‰
     for (auto it = production.rbegin(); it != production.rend(); ++it) {
         if (!it->empty()) {
             symStack.push(*it);
@@ -716,21 +724,21 @@ void Parser::parseValueListPrime() {
 }
 
 /**
- * ½âÎöÁĞÁĞ±íµİ¹é²¿·Ö£ºColumnList' ¡ú , Column ColumnList' | ¦Å
+ * è§£æåˆ—åˆ—è¡¨é€’å½’éƒ¨åˆ†ï¼šColumnList' â†’ , Column ColumnList' | Îµ
  */
 void Parser::parseColumnListPrime() {
-    // Éú³Éµ±Ç°TokenµÄ±êÊ¶£¨ÓÃÓÚ²éÑ¯Ô¤²â±í£©
+    // ç”Ÿæˆå½“å‰Tokençš„æ ‡è¯†ï¼ˆç”¨äºæŸ¥è¯¢é¢„æµ‹è¡¨ï¼‰
     string currentTokenKey = (currentToken.type == TokenType::DELIMITER && currentToken.value == ",")
         ? "," : (currentToken.type == TokenType::DELIMITER && currentToken.value == ")") ? ")" : currentToken.value;
 
-    // ¹¹½¨Ô¤²â±í²éÑ¯¼ü
+    // æ„å»ºé¢„æµ‹è¡¨æŸ¥è¯¢é”®
     string tableKey = "ColumnList'|" + currentTokenKey;
     if (predictTable.find(tableKey) == predictTable.end()) {
-        throw runtime_error("ÎŞÆ¥ÅäµÄColumnList'²úÉúÊ½£º" + tableKey);
+        throw runtime_error("æ— åŒ¹é…çš„ColumnList'äº§ç”Ÿå¼ï¼š" + tableKey);
     }
     vector<string> production = predictTable[tableKey];
 
-    // ÄæĞòÑ¹Èë²úÉúÊ½·ûºÅ£¨Õ»ºó½øÏÈ³ö£©
+    // é€†åºå‹å…¥äº§ç”Ÿå¼ç¬¦å·ï¼ˆæ ˆåè¿›å…ˆå‡ºï¼‰
     for (auto it = production.rbegin(); it != production.rend(); ++it) {
         if (!it->empty()) {
             symStack.push(*it);
@@ -739,112 +747,155 @@ void Parser::parseColumnListPrime() {
 }
 
 /**
- * ½âÎöWHERE×Ó¾ä£ºWhereClause ¡ú WHERE Condition | ¦Å
- * @return ¿ÉÑ¡µÄCondition¶ÔÏó£¨ÓĞWHEREÊ±·µ»ØÌõ¼ş£¬·ñÔò·µ»Ø¿Õ£©
+ * è§£æWHEREå­å¥ï¼šWhereClause â†’ WHERE Condition | Îµ
+ * @return å¯é€‰çš„Conditionå¯¹è±¡ï¼ˆæœ‰WHEREæ—¶è¿”å›æ¡ä»¶ï¼Œå¦åˆ™è¿”å›ç©ºï¼‰
  */
 optional<Condition> Parser::parseWhereClause() {
     parseNonTerminal("WhereClause");
 
-    // Æ¥ÅäWHERE¹Ø¼ü×Ö£¨Èô´æÔÚ£©
+    // åŒ¹é…WHEREå…³é”®å­—ï¼ˆè‹¥å­˜åœ¨ï¼‰
     if (!symStack.empty() && symStack.top() == "KEYWORD(WHERE)") {
         match("KEYWORD(WHERE)");
         symStack.pop();
     }
 
-    // ½âÎöÌõ¼ş±í´ïÊ½£¨Condition ¡ú IDENTIFIER OPERATOR CONSTANT£©
+    // è§£ææ¡ä»¶è¡¨è¾¾å¼ï¼ˆCondition â†’ IDENTIFIER OPERATOR CONSTANTï¼‰
     if (!symStack.empty() && symStack.top() == "Condition") {
         Condition cond;
         parseNonTerminal("Condition");
 
-        // 1. Æ¥ÅäÌõ¼ş¹ØÁªµÄÁĞÃû£¨Èç "age"£©
+        // 1. åŒ¹é…æ¡ä»¶å…³è”çš„åˆ—åï¼ˆå¦‚ "age"ï¼‰
         cond.column = currentToken.value;
         match("IDENTIFIER");
         symStack.pop();
-        // cerr << "[WhereClause] ²¶»ñÌõ¼şÁĞÃû: " << cond.column << endl;
 
-        // 2. Æ¥Åä±È½ÏÔËËã·û£¨Èç ">"¡¢"<"£©
+        // 2. åŒ¹é…æ¯”è¾ƒè¿ç®—ç¬¦ï¼ˆå¦‚ ">"ã€"<"ï¼‰
         cond.op = currentToken.value;
         match("OPERATOR");
         symStack.pop();
-        // cerr << "[WhereClause] ²¶»ñÔËËã·û: " << cond.op << endl;
 
-        // 3. Æ¥ÅäÌõ¼şÖµ£¨Èç "20"¡¢"'Alice'"£©
+        // 3. åŒ¹é…æ¡ä»¶å€¼ï¼ˆå¦‚ "20"ã€"'Alice'"ï¼‰
         cond.value = currentToken.value;
         match("CONSTANT");
         symStack.pop();
-        // cerr << "[WhereClause] ²¶»ñÌõ¼şÖµ: " << cond.value << endl;
 
         return cond;
     }
 
-    // ÎŞWHERE×Ó¾ä£¬·µ»Ø¿Õ
+    // æ— WHEREå­å¥ï¼Œè¿”å›ç©º
     return nullopt;
 }
 
-//¶ÔÍâ½Ó¿Ú
+//å¯¹å¤–æ¥å£
 /**
- * ºËĞÄ½âÎö½Ó¿Ú£ºÖ´ĞĞÓï·¨·ÖÎö£¬Éú³ÉAST
- * @return AST¸ù½Úµã£¨³É¹¦Ê±Îª¾ßÌåÓï¾äµÄAST£¬Ê§°ÜÊ±Îªnullptr£©
+ * æ ¸å¿ƒè§£ææ¥å£ï¼šæ‰§è¡Œè¯­æ³•åˆ†æï¼Œç”ŸæˆAST
+ * @return ASTæ ¹èŠ‚ç‚¹ï¼ˆæˆåŠŸæ—¶ä¸ºå…·ä½“è¯­å¥çš„ASTï¼Œå¤±è´¥æ—¶ä¸ºnullptrï¼‰
  */
 unique_ptr<ASTNode> Parser::parse() {
     try {
-        // ÑéÖ¤Õ»³õÊ¼»¯ÊÇ·ñÕıÈ·£¨Õ»¶¥Ó¦Îª¿ªÊ¼·ûºÅProg£©
+        // éªŒè¯æ ˆåˆå§‹åŒ–æ˜¯å¦æ­£ç¡®ï¼ˆæ ˆé¡¶åº”ä¸ºå¼€å§‹ç¬¦å·Progï¼‰
         if (symStack.empty() || symStack.top() != "Prog") {
-            throw runtime_error("Óï·¨Õ»³õÊ¼»¯´íÎó£ºÕ»¶¥Ó¦Îª'Prog'");
+            throw runtime_error("è¯­æ³•æ ˆåˆå§‹åŒ–é”™è¯¯ï¼šæ ˆé¡¶åº”ä¸º'Prog'");
         }
-        // ¿ªÊ¼½âÎö³ÌĞòÈë¿Ú
+        // å¼€å§‹è§£æç¨‹åºå…¥å£
         unique_ptr<ASTNode> result = parseProg();
-
-        // ¹Ø¼üÓÅ»¯£ºË¢ĞÂcerr»º´æ£¬È·±£µ÷ÊÔÈÕÖ¾ÍêÕûÊä³öºóÔÙ´òÓ¡AST½á¹û
-        // cerr.flush();
         return result;
     } catch (const exception& e) {
-        // ²¶»ñ½âÎö¹ı³ÌÖĞµÄÒì³££¬´òÓ¡´íÎóĞÅÏ¢ºÍµ±Ç°×´Ì¬
-        // cerr << "\n[½âÎö´íÎó] " << e.what() << endl;
-        // debugState();
-        // cerr.flush(); // Òì³£Ê±Ò²Ë¢ĞÂÈÕÖ¾
+        // æ•è·è§£æè¿‡ç¨‹ä¸­çš„å¼‚å¸¸ï¼Œæ‰“å°é”™è¯¯ä¿¡æ¯å’Œå½“å‰çŠ¶æ€
         return nullptr;
     }
 }
 
-//AST´òÓ¡º¯Êı£¨¸¨Öúµ÷ÊÔ
+/**
+ * è§£æDELETEè¯­å¥ï¼šç”ŸæˆDeleteASTèŠ‚ç‚¹
+ * æ”¯æŒï¼šå¸¦WHEREæ¡ä»¶çš„åˆ é™¤æ“ä½œ
+ * @return DeleteASTèŠ‚ç‚¹ï¼ˆåŒ…å«ç›®æ ‡è¡¨åã€WHEREæ¡ä»¶ï¼‰
+ */
+unique_ptr<DeleteAST> Parser::parseDelete() {
+    parseNonTerminal("Delete");
+
+    // åŒ¹é…DELETEå…³é”®å­—
+    match("KEYWORD(DELETE)");
+    if (!symStack.empty() && symStack.top() == "KEYWORD(DELETE)") {
+        symStack.pop();
+    }
+
+    // åŒ¹é…FROMå…³é”®å­—
+    match("KEYWORD(FROM)");
+    if (!symStack.empty() && symStack.top() == "KEYWORD(FROM)") {
+        symStack.pop();
+    }
+
+    // è§£æç›®æ ‡è¡¨å
+    string tableName = currentToken.value;
+    match("IDENTIFIER");
+    if (!symStack.empty() && symStack.top() == "IDENTIFIER") {
+        symStack.pop();
+    }
+
+    // è§£æWHEREå­å¥ï¼ˆå¯é€‰ï¼Œæ— WHEREæ—¶è¿”å›ç©ºï¼‰
+    optional<Condition> condition = parseWhereClause();
+
+    // åŒ¹é…è¯­å¥ç»“æŸåˆ†å·
+    match("SEMICOLON");
+    if (!symStack.empty() && symStack.top() == "SEMICOLON") {
+        symStack.pop();
+    }
+
+    //æ„å»ºDeleteASTå¹¶è¿”å›
+    auto ast = make_unique<DeleteAST>();
+    ast->tableName = tableName;
+    ast->condition = condition;
+    return ast;
+}
+
+//ASTæ‰“å°å‡½æ•°ï¼ˆè¾…åŠ©è°ƒè¯•
 void printAST(ASTNode* ast) {
     if (!ast) {
-        cout << "AST½ÚµãÎª¿Õ£¨½âÎöÊ§°Ü£©" << endl;
+        cout << "ASTèŠ‚ç‚¹ä¸ºç©ºï¼ˆè§£æå¤±è´¥ï¼‰" << endl;
         return;
     }
 
-    // ¸ù¾İAST½ÚµãÀàĞÍ£¬´òÓ¡¶ÔÓ¦½á¹¹
+    // æ ¹æ®ASTèŠ‚ç‚¹ç±»å‹ï¼Œæ‰“å°å¯¹åº”ç»“æ„
     if (auto selectAst = dynamic_cast<SelectAST*>(ast)) {
-        cout << "SelectAST£¨SELECTÓï¾ä£©:" << endl;
-        cout << "  ²éÑ¯ÁĞ: ";
+        cout << "SelectASTï¼ˆSELECTè¯­å¥ï¼‰:" << endl;
+        cout << "  æŸ¥è¯¢åˆ—: ";
         for (size_t i = 0; i < selectAst->columns.size(); ++i) {
             if (i > 0) cout << " ";
             cout << selectAst->columns[i];
         }
         cout << endl;
-        cout << "  Ä¿±ê±í: " << selectAst->tableName << endl;
+        cout << "  ç›®æ ‡è¡¨: " << selectAst->tableName << endl;
         if (selectAst->condition.has_value()) {
             auto& cond = selectAst->condition.value();
-            cout << "  WHEREÌõ¼ş: " << cond.column << " " << cond.op << " " << cond.value << endl;
+            cout << "  WHEREæ¡ä»¶: " << cond.column << " " << cond.op << " " << cond.value << endl;
         } else {
-            cout << "  WHEREÌõ¼ş: ÎŞ" << endl;
+            cout << "  WHEREæ¡ä»¶: æ— " << endl;
         }
     } else if (auto insertAst = dynamic_cast<InsertAST*>(ast)) {
-        cout << "InsertAST£¨INSERTÓï¾ä£©:" << endl;
-        cout << "  Ä¿±ê±í: " << insertAst->tableName << endl;
-        cout << "  ²åÈëÖµ: " << endl;
+        cout << "InsertASTï¼ˆINSERTè¯­å¥ï¼‰:" << endl;
+        cout << "  ç›®æ ‡è¡¨: " << insertAst->tableName << endl;
+        cout << "  æ’å…¥å€¼: " << endl;
         for (const auto& val : insertAst->values) {
             cout << "    - " << val << endl;
         }
     } else if (auto createAst = dynamic_cast<CreateTableAST*>(ast)) {
-        cout << "CreateTableAST£¨CREATE TABLEÓï¾ä£©:" << endl;
-        cout << "  ±íÃû: " << createAst->tableName << endl;
-        cout << "  ÁĞ¶¨Òå: " << endl;
+        cout << "CreateTableASTï¼ˆCREATE TABLEè¯­å¥ï¼‰:" << endl;
+        cout << "  è¡¨å: " << createAst->tableName << endl;
+        cout << "  åˆ—å®šä¹‰: " << endl;
         for (const auto& col : createAst->columns) {
-            cout << "    - ÁĞÃû: " << col.name << ", ÀàĞÍ: " << col.type << endl;
+            cout << "    - åˆ—å: " << col.name << ", ç±»å‹: " << col.type << endl;
+        }
+    } else if (auto deleteAst = dynamic_cast<DeleteAST*>(ast)) {
+        cout << "DeleteASTï¼ˆDELETEè¯­å¥ï¼‰:" << endl;
+        cout << "  ç›®æ ‡è¡¨: " << deleteAst->tableName << endl;
+        if (deleteAst->condition.has_value()) {
+            auto& cond = deleteAst->condition.value();
+            cout << "  WHEREæ¡ä»¶: " << cond.column << " " << cond.op << " " << cond.value << endl;
+        } else {
+            cout << "  WHEREæ¡ä»¶: æ— " << endl;
         }
     } else {
-        cout << "Î´ÖªAST½ÚµãÀàĞÍ" << endl;
+        cout << "æœªçŸ¥ASTèŠ‚ç‚¹ç±»å‹" << endl;
     }
 }
