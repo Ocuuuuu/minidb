@@ -1,170 +1,243 @@
 #include "../../include/compiler/Lexer.h"
-#include <cctype>   // 用于判断字符类型（字母/数字/空格）
+#include <cctype>    // 用于判断字符类型（字母/数字/空格）
 #include <algorithm> // 用于查找关键字
 #include <utility>
 
-//构造函数 初始化词法分析器的SQL字符串、位置、行号、列号，初始化关键字集合
-Lexer::Lexer(string s):sql(std::move(s)),pos(0),line(1),column(0)
-{
+// 构造函数：初始化词法分析器的SQL字符串、位置、行号、列号，初始化关键字集合
+Lexer::Lexer(std::string s) : sql(std::move(s)), pos(0), line(1), column(0) {
     initKeywords();
 }
 
-//初始化关键字集合
-void Lexer::initKeywords()
-{
-    keywords = {"SELECT", "FROM", "WHERE", "CREATE", "TABLE",
-                                 "INSERT", "INTO", "VALUES", "INT", "INTEGER",
-                                 "STRING", "VARCHAR", "int", "integer", "string", "varchar"};
+// 初始化关键字集合（包含SQL常用关键字，区分大小写）
+void Lexer::initKeywords() {
+    keywords = {
+        "SELECT", "FROM", "WHERE", "CREATE", "TABLE",
+        "INSERT", "INTO", "VALUES", "INT", "INTEGER",
+        "STRING", "VARCHAR", "FLOAT", "DOUBLE",
+        "int", "integer", "string", "varchar", "float", "double"
+    };
 }
 
-
-//跳过空白字符，并更新行号和列号
-void Lexer::skipWhitespace()
-{
-    while (pos<sql.size())
-    {
-        char c=sql[pos];
-        if (c==' '||c=='\t')
-        {
+// 跳过空白字符（空格、制表符、换行符），并更新行号和列号
+void Lexer::skipWhitespace() {
+    while (pos < sql.size()) {
+        char c = sql[pos];
+        if (c == ' ' || c == '\t') {
+            // 空格和制表符：只增加列号
             column++;
             pos++;
-        }else if (c=='\n')
-        {
+        } else if (c == '\n') {
+            // 换行符：行号+1，列号重置为0
             line++;
             pos++;
-            column=0;
-        }else
-        {
+            column = 0;
+        } else {
+            // 非空白字符：停止跳过
             break;
         }
     }
 }
 
-//处理标识符和关键字
-Token Lexer::handleIdentifierOrKeyword()
-{
-    int startColumn=column;
-    size_t startPos=pos;
-    //遍历字符 直到遇到非字母/数字/下划线
-    while (pos<sql.size()&&(isalnum(sql[pos]) || sql[pos]=='_'))
-    {
+// 处理标识符和关键字（以字母或下划线开头，后续可跟字母、数字或下划线）
+Token Lexer::handleIdentifierOrKeyword() {
+    int startColumn = column;  // 记录起始列号（用于错误定位）
+    size_t startPos = pos;     // 记录起始位置（用于截取字符串）
+
+    // 遍历字符直到遇到非字母/数字/下划线
+    while (pos < sql.size() && (isalnum(sql[pos]) || sql[pos] == '_')) {
         pos++;
         column++;
     }
-    string word=sql.substr(startPos,pos-startPos);
-    //判断是否为关键字
-    if (keywords.find(word)!=keywords.end())
-    {
-        return Token(TokenType::KEYWORD,word,line,startColumn);
-    }else
-    {
-        return Token(TokenType::IDENTIFIER,word,line,startColumn);
+
+    // 截取从起始位置到当前位置的字符串
+    std::string word = sql.substr(startPos, pos - startPos);
+
+    // 判断是否为关键字（在关键字集合中则为关键字，否则为标识符）
+    if (keywords.find(word) != keywords.end()) {
+        return Token(TokenType::KEYWORD, word, line, startColumn);
+    } else {
+        return Token(TokenType::IDENTIFIER, word, line, startColumn);
     }
 }
 
-//处理常数
-Token Lexer::handleConstant()
-{
-    int startColumn=column;
-    size_t startPos=pos;
-    if (sql[pos]=='"')//字符串常数以双引号开始
-    {
-        pos++;
-        column++;
-        //找到双引号结尾
-        while (pos<sql.size()&&(sql[pos]!='"'))
-        {
-            pos++;
-            column++;
-        }
-        if (pos<sql.size()&&sql[pos]=='"'){
-            //正确闭合
-            pos++;
-            column++;
-            string str=sql.substr(startPos+1,pos-startPos-2);
-            return Token(TokenType::CONSTANT,str,line,startColumn);
-        }
-        //未正确闭合
-        return Token(TokenType::ERROR,"未闭合字符串",line,startColumn);
-    }else if (isdigit(sql[pos]))
-    {
-        //整数常数
-        while (pos<sql.size()&&isdigit(sql[pos]))
-        {
-            pos++;
-            column++;
-        }
-        string num=sql.substr(startPos,pos-startPos);
-        return Token(TokenType::CONSTANT,num,line,startColumn);
-    }
-    //其他类型常数
-    return Token(TokenType::IDENTIFIER,sql,line,startColumn);
-}
-
-//处理运算符(单字运算符)
-Token Lexer::handleOperator()
-{
+// 处理常数（扩展支持：整数、浮点数、单双引号字符串）
+Token Lexer::handleConstant() {
     int startColumn = column;
     size_t startPos = pos;
-    if (pos < sql.size()) {
-        char op = sql[pos];
+
+    // 1. 处理字符串常量（支持单/双引号和转义）
+    if (sql[pos] == '"' || sql[pos] == '\'') {
+        char quoteChar = sql[pos];
         pos++;
         column++;
-        string opStr(1, op);
-        return Token(TokenType::OPERATOR, opStr, line, startColumn);
+
+        while (pos < sql.size()) {
+            if (sql[pos] == '\\' && pos + 1 < sql.size()) {
+                pos += 2;
+                column += 2;
+            } else if (sql[pos] != quoteChar) {
+                pos++;
+                column++;
+            } else {
+                break;
+            }
+        }
+
+        if (pos < sql.size() && sql[pos] == quoteChar) {
+            pos++;
+            column++;
+            std::string str = sql.substr(startPos + 1, pos - startPos - 2);
+
+            // 处理转义序列
+            size_t escPos = 0;
+            while (escPos < str.size()) {
+                if (str[escPos] == '\\' && escPos + 1 < str.size()) {
+                    char nextChar = str[escPos + 1];
+                    if (nextChar == '"' || nextChar == '\'' || nextChar == '\\') {
+                        str.replace(escPos, 2, 1, nextChar);
+                        escPos += 1;
+                    } else {
+                        escPos += 1;
+                    }
+                } else {
+                    escPos += 1;
+                }
+            }
+
+            return Token(TokenType::CONSTANT, str, line, startColumn);
+        } else {
+            return Token(TokenType::ERROR, "Unclosed string (missing " + std::string(1, quoteChar) + ")", line, startColumn);
+        }
     }
-    return Token(TokenType::ERROR, "非法运算符", line, startColumn);
+
+    // 2. 处理数值常量（强制完整读取）
+    else if (isdigit(static_cast<unsigned char>(sql[pos])) || sql[pos] == '.') {
+        size_t numStart = pos;
+        // 读取所有连续的数字和小数点（不提前终止）
+        while (pos < sql.size()) {
+            char c = sql[pos];
+            if (isdigit(static_cast<unsigned char>(c)) || c == '.') {
+                pos++;
+                column++;
+            } else {
+                break;
+            }
+        }
+
+        // 截取完整序列
+        std::string numStr = sql.substr(numStart, pos - numStart);
+        int dotCount = std::count(numStr.begin(), numStr.end(), '.');
+        bool hasDigit = std::any_of(numStr.begin(), numStr.end(),
+                                  [](unsigned char c) { return std::isdigit(c); });
+
+        // 合法性判断
+        if (dotCount > 1 || !hasDigit) {
+            return Token(TokenType::ERROR, "Invalid number format (" + numStr + ")", line, startColumn);
+        }
+
+        return Token(TokenType::CONSTANT, numStr, line, startColumn);
+    }
+
+    // 3. 未知常量类型
+    return Token(TokenType::ERROR, "Unknown constant type", line, startColumn);
 }
 
-
-//处理界符
-Token Lexer::handleDelimiter()
-{
+// 处理运算符
+Token Lexer::handleOperator() {
     int startColumn = column;
-    size_t startPos = pos;
+    char current = sql[pos];
+
+    // 优先判断双字符运算符（顺序很重要）
+    if (pos + 1 < sql.size()) {
+        char next = sql[pos + 1];
+        std::string op_str;
+        op_str += current;
+        op_str += next;
+
+        // 明确列出所有双字符运算符，确保覆盖
+        const std::unordered_set<std::string> double_ops = {"==", "!=", ">=", "<="};
+        if (double_ops.count(op_str)) {
+            pos += 2;
+            column += 2;
+            return Token(TokenType::OPERATOR, op_str, line, startColumn);
+        }
+    }
+
+    // 处理单字符运算符
+    const std::unordered_set<char> single_ops = {'+', '-', '*', '/', '%', '=', '>', '<', '!'};
+    if (single_ops.count(current)) {
+        pos++;
+        column++;
+        return Token(TokenType::OPERATOR, std::string(1, current), line, startColumn);
+    }
+
+    // 无效运算符
+    pos++;
+    column++;
+    return Token(TokenType::ERROR, "Unrecognized operator (" + std::string(1, current) + ")", line, startColumn);
+}
+
+// 处理界符（逗号、分号、括号等）
+Token Lexer::handleDelimiter() {
+    int startColumn = column;
+    // size_t startPos = pos;
+
     if (pos < sql.size()) {
         char delim = sql[pos];
         pos++;
         column++;
-        string delimStr(1, delim);
+        std::string delimStr(1, delim);
         return Token(TokenType::DELIMITER, delimStr, line, startColumn);
     }
-    return Token(TokenType::ERROR, "非法界符", line, startColumn);
+
+    // 非法界符：返回错误
+    return Token(TokenType::ERROR, "Invalid delimiter", line, startColumn);
 }
 
-//获取下一个Token
-Token Lexer::nextToken()
-{
-    skipWhitespace(); //先跳过空白字符
-    if (pos >= sql.size()) { //处理到字符串末尾，返回 EOF_TOKEN
+Token Lexer::nextToken() {
+    skipWhitespace();
+
+    if (pos >= sql.size()) {
         return Token(TokenType::EOF_TOKEN, "", line, column);
     }
+
     char c = sql[pos];
-    //根据当前字符类型，调用相应的处理方法
+
     if (isalpha(c) || c == '_') {
         return handleIdentifierOrKeyword();
-    } else if (isdigit(c) || c == '"') {
+    }
+    // 关键修复：加入 c == '.'，确保小数点进入常量处理
+    else if (isdigit(c) || c == '.' || c == '"' || c == '\'') {
         return handleConstant();
-    } else if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' || c == '=' || c == '>' || c == '<') {
+    }
+    else if (c == '+' || c == '-' || c == '*' || c == '/' || c == '%' ||
+             c == '=' || c == '>' || c == '<' || c == '!') {
         return handleOperator();
-    } else if (c == ',' || c == ';' || c == '(' || c == ')') {
+             }
+    else if (c == ',' || c == ';' || c == '(' || c == ')' || c == '{' || c == '}') { // 补充 } 界符
         return handleDelimiter();
-    } else { //无法识别的字符，视为错误
+    }
+    else {
+        // 修复：中文→英文错误信息
         pos++;
         column++;
-        return Token(TokenType::ERROR, string(1, c), line, column - 1);
+        return Token(TokenType::ERROR, "Unrecognized character (" + std::string(1, c) + ")", line, column - 1);
     }
-}
-//获取所有Token 直到遇到EOF_Token
-vector<Token> Lexer::getAllTokens()
-{
-    vector<Token> tokens;
-    Token token = nextToken();
-    while (token.type != TokenType::EOF_TOKEN) {
-        tokens.push_back(token);
-        token = nextToken();
-    }
-    tokens.push_back(token); //加入EOF_TOKEN
-    return tokens;
 }
 
+// 获取所有Token（直到遇到EOF）
+vector<Token> Lexer::getAllTokens() {
+    vector<Token> tokens;
+    // 直接获取第一个Token，无需默认构造
+    Token current_token = nextToken();
+
+    // 遍历所有非EOF的Token，添加到列表中
+    while (current_token.type != TokenType::EOF_TOKEN) {
+        tokens.push_back(current_token);
+        current_token = nextToken();  // 获取下一个Token
+    }
+
+    // 最后添加EOF_TOKEN，标记Token序列结束
+    tokens.push_back(current_token);
+    return tokens;
+}

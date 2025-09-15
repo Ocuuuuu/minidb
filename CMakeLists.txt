@@ -15,7 +15,6 @@ include_directories(include)
 add_executable(minidb ${SOURCES}
         src/main.cpp)
 
-
 # 创建库目标用于测试
 add_library(minidb_lib ${SOURCES})
 target_include_directories(minidb_lib PUBLIC include)
