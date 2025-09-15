@@ -45,17 +45,22 @@ namespace minidb {
             // 查找辅助
             PageID find_leaf_page(const Value& key);
 
-            // 插入辅助
+            // 插入辅助 - 修改后的接口
             bool insert_into_leaf(PageID leaf_page_id, const Value& key, const RID& rid);
-            bool split_leaf_node(PageID leaf_page_id);
-            bool split_internal_node(PageID internal_page_id);
+            bool split_leaf_node(PageID leaf_page_id, Value* promoted_key, PageID* new_page_id);
+            bool split_internal_node(PageID internal_page_id, Value* promoted_key, PageID* new_page_id);
 
-            // 递归操作
-            bool insert_recursive(PageID current_page_id, const Value& key, const RID& rid);
+            // 递归操作 - 修改后的接口
+            bool insert_recursive(PageID current_page_id, const Value& key,
+                                 const RID& rid, Value* promoted_key,
+                                 PageID* new_child_page_id, bool* need_split);
 
             // 新节点创建
             PageID create_new_leaf_node();
             PageID create_new_internal_node();
+
+            // 根节点处理
+            bool create_new_root(PageID left_child_id, const Value& key, PageID right_child_id);
         };
 
     } // namespace engine

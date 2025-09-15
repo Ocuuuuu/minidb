@@ -5,6 +5,7 @@
 #include "common/Types.h"
 #include "common/Value.h"
 #include <cstdint>
+#include <vector>
 
 namespace minidb {
 namespace engine {
@@ -13,8 +14,7 @@ namespace engine {
 struct BPlusNodeHeader {
     uint16_t is_leaf;        // 是否是叶子节点 (1/0)
     uint16_t key_count;      // 当前键的数量
-    PageID next_page_id;     // 下一个叶子节点的页ID（用于范围扫描）
-    // 注意：内部节点不需要next_page_id，但为了统一头部而保留
+    PageID next_page_id;     // 下一个叶子节点的页ID
 };
 #pragma pack(pop)
 
@@ -28,35 +28,54 @@ public:
 
     // 容量管理
     uint16_t get_key_count() const { return header_.key_count; }
-    void set_key_count(uint16_t count) { header_.key_count = count; }
+    void set_key_count(uint16_t count) {
+        header_.key_count = count;
+        mark_dirty();
+    }
 
     PageID get_next_page_id() const { return header_.next_page_id; }
-    void set_next_page_id(PageID page_id) { header_.next_page_id = page_id; }
+    void set_next_page_id(PageID page_id) {
+        header_.next_page_id = page_id;
+        mark_dirty();
+    }
 
     // 键操作
     Value get_key_at(int index) const;
     void set_key_at(int index, const Value& key);
+    void remove_key_at(int index);
 
-    // 值操作（叶子节点存储RID，内部节点存储PageID）
+    // 值操作
     RID get_rid_at(int index) const;
     void set_rid_at(int index, const RID& rid);
+    void remove_rid_at(int index);
 
     PageID get_child_page_id_at(int index) const;
     void set_child_page_id_at(int index, PageID page_id);
+    void remove_child_page_id_at(int index);
 
     // 查找操作
     int find_key_index(const Value& key) const;
 
-    // 插入操作（简易版，假设有足够空间）
+    // 插入操作
     bool insert_leaf_pair(const Value& key, const RID& rid);
     bool insert_internal_pair(const Value& key, PageID child_page_id);
 
+    // 删除操作
+    bool remove_leaf_pair(int index);
+    bool remove_internal_pair(int index);
+
     // 容量检查
     bool is_full() const;
+    bool is_underflow() const;
     uint16_t get_free_space() const;
+    uint16_t get_max_capacity() const;
 
     // 序列化标记
     void mark_dirty() { page_->setDirty(true); }
+    void save_header();
+
+    // 调试信息
+    void print_debug_info() const;
 
 private:
     storage::Page* page_;        // 对应的物理页
@@ -64,13 +83,25 @@ private:
 
     // 计算数据区域的偏移量
     char* get_data_start() const;
+    size_t get_key_size() const;
+    size_t get_value_size() const;
     size_t get_pair_size() const;
     size_t get_key_offset(int index) const;
     size_t get_value_offset(int index) const;
 
     // 序列化辅助函数
-    void serialize_value(const Value& value, char* buffer) const;
-    Value deserialize_value(const char* buffer, TypeId type) const;
+    void serialize_key(const Value& key, char* buffer) const;
+    Value deserialize_key(const char* buffer) const;
+    void serialize_rid(const RID& rid, char* buffer) const;
+    RID deserialize_rid(const char* buffer) const;
+    void serialize_page_id(PageID page_id, char* buffer) const;
+    PageID deserialize_page_id(const char* buffer) const;
+
+    // 内部辅助方法
+    void shift_keys_right(int start_index, int count = 1);
+    void shift_keys_left(int start_index, int count = 1);
+    void shift_values_right(int start_index, int count = 1);
+    void shift_values_left(int start_index, int count = 1);
 };
 
 } // namespace engine
