@@ -10,238 +10,197 @@ namespace minidb
 {
     namespace engine
     {
+        uint16_t BPlusTreePage::calculate_key_size(TypeId type) const {
+            switch (type) {
+                case TypeId::BOOLEAN: return sizeof(bool);
+                case TypeId::INTEGER: return sizeof(int32_t);
+                case TypeId::VARCHAR: return 0;
+                default: return sizeof(int32_t);
+            }
+        }
+
         BPlusTreePage::BPlusTreePage(storage::Page* page) : page_(page) {
             const char* data = page_->getData();
             std::memcpy(&header_, data, sizeof(BPlusNodeHeader));
+
+            // 初始化新页面
+            if (header_.key_type == TypeId::INVALID) {
+                header_.key_type = TypeId::INTEGER;
+                header_.key_size = calculate_key_size(TypeId::INTEGER);
+                header_.key_count = 0;
+                header_.is_leaf = false;
+                header_.next_page_id = 0;
+                save_header();
+            }
+
+            if (header_.key_size == 0) {
+                header_.key_size = calculate_key_size(header_.key_type);
+                save_header(); // ✅ 不是 mark_dirty()
+            }
+
+            // 初始化内部节点的第一个指针
+            if (!is_leaf() && header_.key_count == 0) {
+                set_child_page_id_at(0, 0);
+            }
         }
 
         Value BPlusTreePage::get_key_at(int index) const {
             if (index < 0 || index >= header_.key_count) {
-                throw std::out_of_range("Key index out of range: " + std::to_string(index));
+                throw std::out_of_range("Key index out of range");
             }
-
-            size_t offset = get_key_offset(index);
-            const char* data = get_data_start();
-            return deserialize_key(data + offset);
+            return deserialize_key(get_data_start() + get_key_offset(index));
         }
 
         void BPlusTreePage::set_key_at(int index, const Value& key) {
-            if (index < 0 || index >= header_.key_count) {
-                throw std::out_of_range("Key index out of range: " + std::to_string(index));
+            if (index < 0 || index >= header_.key_count) { // 改为 >=，不允许 index == key_count
+                throw std::out_of_range("Key index out of range");
             }
-
-            size_t offset = get_key_offset(index);
-            char* data = get_data_start();
-            serialize_key(key, data + offset);
+            serialize_key(key, get_data_start() + get_key_offset(index));
             mark_dirty();
         }
 
         void BPlusTreePage::remove_key_at(int index) {
             if (index < 0 || index >= header_.key_count) {
-                throw std::out_of_range("Key index out of range: " + std::to_string(index));
+                throw std::out_of_range("Key index out of range");
             }
 
-            // 向左移动后面的键
-            shift_keys_left(index + 1);
+            if (index < header_.key_count - 1) {
+                shift_keys_left(index + 1);
+            }
+
             header_.key_count--;
+            save_header(); // ✅ 写回
             mark_dirty();
         }
 
         RID BPlusTreePage::get_rid_at(int index) const {
-            if (!is_leaf()) {
-                throw std::logic_error("Not a leaf node, cannot get RID");
-            }
+            if (!is_leaf()) throw std::logic_error("Not a leaf node");
             if (index < 0 || index >= header_.key_count) {
-                throw std::out_of_range("RID index out of range: " + std::to_string(index));
+                throw std::out_of_range("RID index out of range");
             }
-
-            size_t offset = get_value_offset(index);
-            const char* data = get_data_start();
-            return deserialize_rid(data + offset);
+            return deserialize_rid(get_data_start() + get_value_offset(index));
         }
 
         void BPlusTreePage::set_rid_at(int index, const RID& rid) {
-            if (!is_leaf()) {
-                throw std::logic_error("Not a leaf node, cannot set RID");
+            if (!is_leaf()) throw std::logic_error("Not a leaf node");
+            if (index < 0 || index >= header_.key_count) { // 同样改为 >=
+                throw std::out_of_range("RID index out of range");
             }
-            if (index < 0 || index >= header_.key_count) {
-                throw std::out_of_range("RID index out of range: " + std::to_string(index));
-            }
-
-            size_t offset = get_value_offset(index);
-            char* data = get_data_start();
-            serialize_rid(rid, data + offset);
-            mark_dirty();
-        }
-
-        void BPlusTreePage::remove_rid_at(int index) {
-            if (!is_leaf()) {
-                throw std::logic_error("Not a leaf node, cannot remove RID");
-            }
-            if (index < 0 || index >= header_.key_count) {
-                throw std::out_of_range("RID index out of range: " + std::to_string(index));
-            }
-
-            // 向左移动后面的RID
-            shift_values_left(index + 1);
+            serialize_rid(rid, get_data_start() + get_value_offset(index));
             mark_dirty();
         }
 
         PageID BPlusTreePage::get_child_page_id_at(int index) const {
-            if (is_leaf()) {
-                throw std::logic_error("Leaf node, cannot get child page ID");
-            }
+            if (is_leaf()) throw std::logic_error("Leaf node");
             if (index < 0 || index > header_.key_count) {
-                throw std::out_of_range("Child index out of range: " + std::to_string(index));
+                throw std::out_of_range("Child index out of range");
             }
-
-            size_t offset = get_value_offset(index);
-            const char* data = get_data_start();
-            return deserialize_page_id(data + offset);
+            return deserialize_page_id(get_data_start() + get_value_offset(index));
         }
 
         void BPlusTreePage::set_child_page_id_at(int index, PageID page_id) {
-            if (is_leaf()) {
-                throw std::logic_error("Leaf node, cannot set child page ID");
+            if (is_leaf()) throw std::logic_error("Leaf node");
+            if (index < 0 || index > header_.key_count + 1) {
+                throw std::out_of_range("Child index out of range");
             }
-            if (index < 0 || index > header_.key_count) {
-                throw std::out_of_range("Child index out of range: " + std::to_string(index));
-            }
-
-            size_t offset = get_value_offset(index);
-            char* data = get_data_start();
-            serialize_page_id(page_id, data + offset);
-            mark_dirty();
-        }
-
-        void BPlusTreePage::remove_child_page_id_at(int index) {
-            if (is_leaf()) {
-                throw std::logic_error("Leaf node, cannot remove child page ID");
-            }
-            if (index < 0 || index > header_.key_count) {
-                throw std::out_of_range("Child index out of range: " + std::to_string(index));
-            }
-
-            // 向左移动后面的指针
-            shift_values_left(index + 1);
+            serialize_page_id(page_id, get_data_start() + get_value_offset(index));
             mark_dirty();
         }
 
         int BPlusTreePage::find_key_index(const Value& key) const {
-            // 使用二分查找提高性能
-            int left = 0;
-            int right = header_.key_count - 1;
+            if (header_.key_count == 0) return -1;
 
+            int left = 0, right = header_.key_count - 1;
             while (left <= right) {
                 int mid = left + (right - left) / 2;
                 Value mid_key = get_key_at(mid);
 
-                if (mid_key == key) {
-                    return mid; // 精确匹配
-                } else if (mid_key < key) {
-                    left = mid + 1;
-                } else {
-                    right = mid - 1;
-                }
+                if (mid_key == key) return mid;
+                else if (mid_key < key) left = mid + 1;
+                else right = mid - 1;
             }
-
-            return -left - 1; // 返回插入位置提示
+            return -left - 1;
         }
 
         bool BPlusTreePage::insert_leaf_pair(const Value& key, const RID& rid) {
-            if (!is_leaf() || is_full()) {
-                return false;
-            }
+            if (!is_leaf() || is_full()) return false;
 
-            int insert_pos = find_key_index(key);
-            if (insert_pos >= 0) {
-                // 键已存在，不允许重复
-                return false;
-            }
-            insert_pos = -insert_pos - 1;
+            int pos_hint = find_key_index(key);
+            if (pos_hint >= 0) return false; // 键已存在
 
-            // 为插入腾出空间
+            int insert_pos = -pos_hint - 1;
+            if (insert_pos < 0 || insert_pos > header_.key_count) return false;
+
+            // ✅ 先移动，再插入
             if (insert_pos < header_.key_count) {
                 shift_keys_right(insert_pos);
                 shift_values_right(insert_pos);
             }
 
-            // 插入新键值对
-            set_key_at(insert_pos, key);
-            set_rid_at(insert_pos, rid);
-
+            // ✅ 插入前增加 key_count
             header_.key_count++;
+            save_header(); // ✅ 写回 header
+
+            // 直接写入（此时 index < key_count，不会触发增加）
+            serialize_key(key, get_data_start() + get_key_offset(insert_pos));
+            serialize_rid(rid, get_data_start() + get_value_offset(insert_pos));
             mark_dirty();
+
             return true;
         }
 
         bool BPlusTreePage::insert_internal_pair(const Value& key, PageID child_page_id) {
-            if (is_leaf() || is_full()) {
-                return false;
-            }
+            if (is_leaf() || is_full()) return false;
 
-            int insert_pos = find_key_index(key);
-            if (insert_pos >= 0) {
-                // 键已存在
-                return false;
-            }
-            insert_pos = -insert_pos - 1;
+            int pos_hint = find_key_index(key);
+            if (pos_hint >= 0) return false;
 
-            // 移动键和指针为插入腾出空间
-            // 注意：内部节点有n+1个指针，比键多一个
+            int insert_pos = -pos_hint - 1;
+            if (insert_pos < 0 || insert_pos > header_.key_count) return false;
 
-            // 先移动指针（比键多一个）
-            if (insert_pos <= header_.key_count) {
-                shift_values_right(insert_pos + 1);
-            }
-
-            // 再移动键
             if (insert_pos < header_.key_count) {
                 shift_keys_right(insert_pos);
+                shift_values_right(insert_pos + 1); // 注意：内部节点有n+1个指针
             }
 
-            // 插入新键和指针
-            set_key_at(insert_pos, key);
-            set_child_page_id_at(insert_pos + 1, child_page_id);
-
+            // ✅ 先增加 key_count
             header_.key_count++;
+            save_header();
+
+            // 插入键和子指针
+            serialize_key(key, get_data_start() + get_key_offset(insert_pos));
+            serialize_page_id(child_page_id, get_data_start() + get_value_offset(insert_pos + 1));
             mark_dirty();
+
             return true;
         }
 
         bool BPlusTreePage::remove_leaf_pair(int index) {
-            if (!is_leaf() || index < 0 || index >= header_.key_count) {
-                return false;
-            }
-
+            if (!is_leaf() || index < 0 || index >= header_.key_count) return false;
             remove_key_at(index);
-            remove_rid_at(index);
-            return true;
-        }
 
-        bool BPlusTreePage::remove_internal_pair(int index) {
-            if (is_leaf() || index < 0 || index >= header_.key_count) {
-                return false;
+            // 移动RID
+            if (index < header_.key_count) {
+                shift_values_left(index + 1);
             }
-
-            remove_key_at(index);
-            remove_child_page_id_at(index + 1);
+            mark_dirty();
             return true;
         }
 
         bool BPlusTreePage::is_full() const {
             return header_.key_count >= get_max_capacity();
         }
-
-        bool BPlusTreePage::is_underflow() const {
-            // 简单实现：节点少于一半容量时认为下溢
-            return header_.key_count < get_max_capacity() / 2;
-        }
-
         uint16_t BPlusTreePage::get_free_space() const {
             size_t used_space = header_.key_count * get_pair_size();
             size_t total_space = PAGE_SIZE - sizeof(BPlusNodeHeader);
             return static_cast<uint16_t>(total_space - used_space);
+        }
+
+        bool BPlusTreePage::is_underflow() const {
+            if (header_.key_count == 0) return true;
+
+            int min_keys = get_max_capacity() / 2; // 典型的 B+树最小度数
+            return header_.key_count < min_keys;
         }
 
         uint16_t BPlusTreePage::get_max_capacity() const {
@@ -249,17 +208,13 @@ namespace minidb
             if (pair_size == 0) return 0;
 
             size_t total_space = PAGE_SIZE - sizeof(BPlusNodeHeader);
-            // 内部节点需要额外空间存储第一个指针
-            if (!is_leaf()) {
-                total_space -= get_value_size();
-            }
+            if (!is_leaf()) total_space -= get_value_size();
 
             return static_cast<uint16_t>(total_space / pair_size);
         }
 
         void BPlusTreePage::save_header() {
-            char* data = const_cast<char*>(page_->getData());
-            std::memcpy(data, &header_, sizeof(BPlusNodeHeader));
+            std::memcpy(const_cast<char*>(page_->getData()), &header_, sizeof(BPlusNodeHeader));
             mark_dirty();
         }
 
@@ -267,6 +222,8 @@ namespace minidb
             std::cout << "Node Info: " << (is_leaf() ? "Leaf" : "Internal")
                       << ", KeyCount: " << header_.key_count
                       << ", NextPage: " << header_.next_page_id
+                      << ", KeyType: " << static_cast<int>(header_.key_type)
+                      << ", KeySize: " << header_.key_size
                       << ", MaxCapacity: " << get_max_capacity()
                       << std::endl;
 
@@ -294,8 +251,18 @@ namespace minidb
         }
 
         size_t BPlusTreePage::get_key_size() const {
-            // 假设所有键都是INTEGER类型，实际应该根据key_type确定
-            return sizeof(int32_t);
+            // 对于固定长度类型，使用header中的key_size
+            if (header_.key_size > 0) {
+                return header_.key_size;
+            }
+
+            // 对于VARCHAR变长类型，需要特殊处理
+            switch (header_.key_type) {
+                case TypeId::VARCHAR:
+                    return 256 + sizeof(uint16_t); // 字符串最大长度 + 长度字段
+                default:
+                    return sizeof(int32_t); // 默认
+            }
         }
 
         size_t BPlusTreePage::get_value_size() const {
@@ -307,27 +274,91 @@ namespace minidb
         }
 
         size_t BPlusTreePage::get_key_offset(int index) const {
-            return index * get_pair_size();
+            if (header_.key_type != TypeId::VARCHAR) {
+                // 固定长度类型：每个键值对的大小相同
+                return index * get_pair_size();
+            }
+
+            // 对于VARCHAR类型，需要遍历计算偏移量
+            size_t offset = 0;
+            for (int i = 0; i < index; ++i) {
+                const char* data = get_data_start() + offset;
+                uint16_t len;
+                std::memcpy(&len, data, sizeof(uint16_t));
+                offset += sizeof(uint16_t) + len + get_value_size();
+            }
+            return offset;
         }
 
         size_t BPlusTreePage::get_value_offset(int index) const {
-            return index * get_pair_size() + get_key_size();
+            if (header_.key_type != TypeId::VARCHAR) {
+                // 固定长度类型：值在键之后
+                return index * get_pair_size() + get_key_size();
+            }
+
+            // 对于VARCHAR类型，需要计算当前键的偏移量
+            size_t key_offset = get_key_offset(index);
+            const char* data = get_data_start() + key_offset;
+            uint16_t len;
+            std::memcpy(&len, data, sizeof(uint16_t));
+            return key_offset + sizeof(uint16_t) + len;
         }
 
         void BPlusTreePage::serialize_key(const Value& key, char* buffer) const {
-            if (key.getType() == TypeId::INTEGER) {
-                int32_t int_value = key.getAsInt();
-                std::memcpy(buffer, &int_value, sizeof(int32_t));
-            } else {
-                throw std::runtime_error("Unsupported key type for serialization");
+            if (key.getType() != header_.key_type) {
+                throw std::runtime_error("Key type mismatch: expected " +
+                                       std::to_string(static_cast<int>(header_.key_type)) +
+                                       ", got " + std::to_string(static_cast<int>(key.getType())));
+            }
+
+            switch (header_.key_type) {
+                case TypeId::BOOLEAN: {
+                    bool bool_value = key.getAsBool();
+                    std::memcpy(buffer, &bool_value, sizeof(bool));
+                    break;
+                }
+                case TypeId::INTEGER: {
+                    int32_t int_value = key.getAsInt();
+                    std::memcpy(buffer, &int_value, sizeof(int32_t));
+                    break;
+                }
+                case TypeId::VARCHAR: {
+                    const std::string& str_value = key.getAsString();
+                    uint16_t len = static_cast<uint16_t>(str_value.size());
+                    // 先存储长度
+                    std::memcpy(buffer, &len, sizeof(uint16_t));
+                    // 再存储字符串内容
+                    std::memcpy(buffer + sizeof(uint16_t), str_value.c_str(), len);
+                    break;
+                }
+                case TypeId::INVALID:
+                default:
+                    throw std::runtime_error("Unsupported key type for serialization");
             }
         }
 
         Value BPlusTreePage::deserialize_key(const char* buffer) const {
-            // 假设键都是INTEGER类型
-            int32_t int_value;
-            std::memcpy(&int_value, buffer, sizeof(int32_t));
-            return Value(int_value);
+            switch (header_.key_type) {
+                case TypeId::BOOLEAN: {
+                    bool bool_value;
+                    std::memcpy(&bool_value, buffer, sizeof(bool));
+                    return Value(bool_value);
+                }
+                case TypeId::INTEGER: {
+                    int32_t int_value;
+                    std::memcpy(&int_value, buffer, sizeof(int32_t));
+                    return Value(int_value);
+                }
+                case TypeId::VARCHAR: {
+                    uint16_t len;
+                    std::memcpy(&len, buffer, sizeof(uint16_t));
+                    std::string str_value(buffer + sizeof(uint16_t), len);
+                    return Value(str_value);
+                }
+                case TypeId::INVALID:
+                default:
+                    throw std::runtime_error("Unsupported key type for deserialization");
+            }
         }
 
         void BPlusTreePage::serialize_rid(const RID& rid, char* buffer) const {
@@ -351,21 +382,26 @@ namespace minidb
         }
 
         void BPlusTreePage::shift_keys_right(int start_index, int count) {
-            if (start_index >= header_.key_count) return;
+            if (start_index >= header_.key_count || count <= 0) return;
 
             char* data = get_data_start();
             size_t key_size = get_key_size();
             size_t pair_size = get_pair_size();
 
+            // 计算要移动的键数量
             int move_count = header_.key_count - start_index;
+
+            // 源位置：从start_index开始的键
             char* src = data + get_key_offset(start_index);
+            // 目标位置：向右移动count个键的位置
             char* dest = src + count * pair_size;
 
+            // 移动键
             std::memmove(dest, src, move_count * key_size);
         }
 
         void BPlusTreePage::shift_keys_left(int start_index, int count) {
-            if (start_index >= header_.key_count) return;
+            if (start_index >= header_.key_count || count <= 0) return;
 
             char* data = get_data_start();
             size_t key_size = get_key_size();
@@ -379,13 +415,15 @@ namespace minidb
         }
 
         void BPlusTreePage::shift_values_right(int start_index, int count) {
-            if (start_index > header_.key_count) return;
+            // 内部节点有key_count+1个指针，叶子节点有key_count个RID
+            int total_values = is_leaf() ? header_.key_count : header_.key_count + 1;
+            if (start_index >= total_values || count <= 0) return;
 
             char* data = get_data_start();
             size_t value_size = get_value_size();
             size_t pair_size = get_pair_size();
 
-            int move_count = (is_leaf() ? header_.key_count : header_.key_count + 1) - start_index;
+            int move_count = total_values - start_index;
             char* src = data + get_value_offset(start_index);
             char* dest = src + count * pair_size;
 
@@ -393,17 +431,35 @@ namespace minidb
         }
 
         void BPlusTreePage::shift_values_left(int start_index, int count) {
-            if (start_index > header_.key_count) return;
+            int total_values = is_leaf() ? header_.key_count : header_.key_count + 1;
+            if (start_index >= total_values || count <= 0) return;
 
             char* data = get_data_start();
             size_t value_size = get_value_size();
             size_t pair_size = get_pair_size();
 
-            int move_count = (is_leaf() ? header_.key_count : header_.key_count + 1) - start_index;
+            int move_count = total_values - start_index;
             char* src = data + get_value_offset(start_index);
             char* dest = src - count * pair_size;
 
             std::memmove(dest, src, move_count * value_size);
         }
-    }//namespace egine
+
+        // 初始化页面数据
+        void BPlusTreePage::initialize_page() {
+            // 清空页面数据
+            char* data = const_cast<char*>(page_->getData());
+            std::memset(data, 0, PAGE_SIZE);
+
+            // 初始化头信息
+            header_.key_count = 0;
+            header_.is_leaf = false;
+            header_.next_page_id = 0;
+            header_.key_type = TypeId::INTEGER;
+            header_.key_size = calculate_key_size(TypeId::INTEGER);
+
+            save_header();
+            mark_dirty();
+        }
+    }//namespace engine
 }//namespace minidb

@@ -15,6 +15,8 @@ struct BPlusNodeHeader {
     uint16_t is_leaf;        // 是否是叶子节点 (1/0)
     uint16_t key_count;      // 当前键的数量
     PageID next_page_id;     // 下一个叶子节点的页ID
+    TypeId key_type;         // 键的数据类型
+    uint16_t key_size;       // 键的固定大小（VARCHAR为0）
 };
 #pragma pack(pop)
 
@@ -25,6 +27,15 @@ public:
     // 类型检查
     bool is_leaf() const { return header_.is_leaf == 1; }
     void set_leaf(bool is_leaf) { header_.is_leaf = is_leaf ? 1 : 0; }
+
+    // 键类型管理 - 新增
+    TypeId get_key_type() const { return header_.key_type; }
+    void set_key_type(TypeId key_type) {
+        header_.key_type = key_type;
+        header_.key_size = calculate_key_size(key_type);
+        save_header(); // ✅ 写回
+        mark_dirty();
+    }
 
     // 容量管理
     uint16_t get_key_count() const { return header_.key_count; }
@@ -77,9 +88,14 @@ public:
     // 调试信息
     void print_debug_info() const;
 
+    void initialize_page();
+
 private:
     storage::Page* page_;        // 对应的物理页
     BPlusNodeHeader header_;     // 节点头信息
+
+    // 计算键大小的辅助函数 - 新增
+    uint16_t calculate_key_size(TypeId type) const;
 
     // 计算数据区域的偏移量
     char* get_data_start() const;

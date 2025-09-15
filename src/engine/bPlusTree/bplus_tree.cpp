@@ -4,7 +4,9 @@
 #include <iostream>
 #include <cstring>
 #include <vector>
-#include <cassert>
+#include <queue>
+#include <memory>
+#include <limits>
 
 namespace minidb {
 namespace engine {
@@ -14,15 +16,33 @@ BPlusTree::BPlusTree(std::shared_ptr<storage::Pager> pager,
                      TypeId key_type)
     : pager_(pager), root_page_id_(root_page_id), key_type_(key_type) {}
 
-bool BPlusTree::insert(const Value& key, const RID& rid) {
-    if (root_page_id_ == INVALID_PAGE_ID) {
-        // 如果树为空，创建第一个叶子节点作为根节点
-        root_page_id_ = create_new_leaf_node();
+Value BPlusTree::get_min_value_for_type(TypeId type) const {
+    switch (type) {
+        case TypeId::BOOLEAN:
+            return Value(false);
+        case TypeId::INTEGER:
+            return Value(std::numeric_limits<int32_t>::min());
+        case TypeId::VARCHAR:
+            return Value("");
+        default:
+            return Value();
+    }
+}
 
-        storage::Page* page = pager_->getPage(root_page_id_);
-        BPlusTreePage root_node(page);
-        bool success = root_node.insert_leaf_pair(key, rid);
-        pager_->releasePage(root_page_id_, success);
+void BPlusTree::validate_key_type(const Value& key) const {
+    if (key.getType() != key_type_) {
+        throw std::runtime_error("Key type mismatch in B+ tree operation");
+    }
+}
+
+bool BPlusTree::insert(const Value& key, const RID& rid) {
+    validate_key_type(key);
+
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        root_page_id_ = create_new_leaf_node();
+        auto node = get_node(root_page_id_);
+        bool success = node->insert_leaf_pair(key, rid);
+        release_node(root_page_id_, success);
         return success;
     }
 
@@ -30,39 +50,35 @@ bool BPlusTree::insert(const Value& key, const RID& rid) {
     PageID new_child_page_id = INVALID_PAGE_ID;
     bool need_split = false;
 
-    // 递归插入
     bool result = insert_recursive(root_page_id_, key, rid,
                                  &promoted_key, &new_child_page_id, &need_split);
 
     if (need_split) {
-        // 根节点需要分裂，创建新的根节点
         result = create_new_root(root_page_id_, promoted_key, new_child_page_id);
     }
 
-    if (!result) {
-        std::cerr << "Insert failed for key: " << key.toString() << std::endl;
-    }
     return result;
 }
 
-RID BPlusTree::search(const Value& key) {
+RID BPlusTree::search(const Value& key) const {
+    validate_key_type(key);
+
     if (root_page_id_ == INVALID_PAGE_ID) {
         return RID::invalid();
     }
 
     try {
         PageID leaf_page_id = find_leaf_page(key);
-        storage::Page* page = pager_->getPage(leaf_page_id);
-        BPlusTreePage node(page);
+        auto node = get_node(leaf_page_id);
 
-        int index = node.find_key_index(key);
+        int index = node->find_key_index(key);
         if (index >= 0) {
-            RID result = node.get_rid_at(index);
-            pager_->releasePage(leaf_page_id, false);
+            RID result = node->get_rid_at(index);
+            release_node(leaf_page_id, false);
             return result;
         }
 
-        pager_->releasePage(leaf_page_id, false);
+        release_node(leaf_page_id, false);
         return RID::invalid();
     } catch (const std::exception& e) {
         std::cerr << "Search error: " << e.what() << std::endl;
@@ -70,285 +86,404 @@ RID BPlusTree::search(const Value& key) {
     }
 }
 
-std::vector<RID> BPlusTree::range_search(const Value& begin, const Value& end) {
+std::vector<RID> BPlusTree::range_search(const Value& begin, const Value& end) const {
+    validate_key_type(begin);
+    validate_key_type(end);
+
     std::vector<RID> results;
-    // TODO: 实现真正的范围扫描
+
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        return results;
+    }
+
+    try {
+        PageID current_page_id = find_leaf_page(begin);
+
+        while (current_page_id != INVALID_PAGE_ID) {
+            auto node = get_node(current_page_id);
+
+            int start_index = 0;
+            Value min_value = get_min_value_for_type(key_type_);
+            if (begin != min_value) {
+                int pos = node->find_key_index(begin);
+                start_index = (pos >= 0) ? pos : (-pos - 1);
+            }
+
+            for (int i = start_index; i < node->get_key_count(); ++i) {
+                Value current_key = node->get_key_at(i);
+                if (current_key > end) {
+                    release_node(current_page_id, false);
+                    return results;
+                }
+                if (current_key > begin && current_key < end) {
+                    results.push_back(node->get_rid_at(i));
+                }
+            }
+
+            PageID next_page = node->get_next_page_id();
+            release_node(current_page_id, false);
+            current_page_id = next_page;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Range search error: " << e.what() << std::endl;
+    }
+
     return results;
 }
 
 bool BPlusTree::remove(const Value& key) {
-    // TODO: 实现删除操作
-    return false;
+    validate_key_type(key);
+
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        return false;
+    }
+
+    bool need_merge = false;
+    bool result = remove_recursive(root_page_id_, key, &need_merge);
+
+    if (result && root_page_id_ != INVALID_PAGE_ID) {
+        auto root_node = get_node(root_page_id_);
+        if (!root_node->is_leaf() && root_node->get_key_count() == 0) {
+            PageID new_root_id = root_node->get_child_page_id_at(0);
+            pager_->deallocatePage(root_page_id_);
+            root_page_id_ = new_root_id;
+        }
+        release_node(root_page_id_, false);
+    }
+
+    return result;
 }
 
 uint32_t BPlusTree::get_height() const {
-    // TODO: 实现高度计算
-    return 1;
+    if (root_page_id_ == INVALID_PAGE_ID) return 0;
+
+    uint32_t height = 0;
+    PageID current_page_id = root_page_id_;
+
+    try {
+        while (current_page_id != INVALID_PAGE_ID) {
+            auto node = get_node(current_page_id);
+            height++;
+            if (node->is_leaf()) {
+                release_node(current_page_id, false);
+                break;
+            }
+            PageID first_child = node->get_child_page_id_at(0);
+            release_node(current_page_id, false);
+            current_page_id = first_child;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Get height error: " << e.what() << std::endl;
+    }
+
+    return height;
 }
 
 uint32_t BPlusTree::get_node_count() const {
-    // TODO: 实现节点计数
-    return 1;
+    if (root_page_id_ == INVALID_PAGE_ID) return 0;
+
+    uint32_t count = 0;
+    std::queue<PageID> queue;
+    queue.push(root_page_id_);
+
+    try {
+        while (!queue.empty()) {
+            PageID current_id = queue.front();
+            queue.pop();
+            count++;
+
+            auto node = get_node(current_id);
+            if (!node->is_leaf()) {
+                for (int i = 0; i <= node->get_key_count(); ++i) {
+                    PageID child_id = node->get_child_page_id_at(i);
+                    if (child_id != INVALID_PAGE_ID) {
+                        queue.push(child_id);
+                    }
+                }
+            }
+            release_node(current_id, false);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Get node count error: " << e.what() << std::endl;
+    }
+
+    return count;
 }
 
-BPlusTreePage BPlusTree::get_node(PageID page_id) {
+void BPlusTree::print_tree() const {
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        std::cout << "Tree is empty" << std::endl;
+        return;
+    }
+
+    std::queue<std::pair<PageID, int>> queue;
+    queue.push({root_page_id_, 0});
+
+    try {
+        while (!queue.empty()) {
+            auto [current_id, level] = queue.front();
+            queue.pop();
+
+            auto node = get_node(current_id);
+            std::cout << "Level " << level << " - Page " << current_id
+                      << " (" << (node->is_leaf() ? "Leaf" : "Internal") << "): ";
+
+            for (int i = 0; i < node->get_key_count(); ++i) {
+                std::cout << node->get_key_at(i).toString() << " ";
+            }
+            std::cout << std::endl;
+
+            if (!node->is_leaf()) {
+                for (int i = 0; i <= node->get_key_count(); ++i) {
+                    PageID child_id = node->get_child_page_id_at(i);
+                    if (child_id != INVALID_PAGE_ID) {
+                        queue.push({child_id, level + 1});
+                    }
+                }
+            }
+            release_node(current_id, false);
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Print tree error: " << e.what() << std::endl;
+    }
+}
+
+std::unique_ptr<BPlusTreePage> BPlusTree::get_node(PageID page_id) const {
     storage::Page* page = pager_->getPage(page_id);
-    return BPlusTreePage(page);
+    if (!page) {
+        throw std::runtime_error("Failed to get page: " + std::to_string(page_id));
+    }
+    return std::make_unique<BPlusTreePage>(page);
 }
 
-void BPlusTree::release_node(PageID page_id, bool is_dirty) {
+void BPlusTree::release_node(PageID page_id, bool is_dirty) const {
     pager_->releasePage(page_id, is_dirty);
 }
 
-PageID BPlusTree::find_leaf_page(const Value& key) {
+PageID BPlusTree::find_leaf_page(const Value& key) const {
     PageID current_page_id = root_page_id_;
 
-    while (true) {
-        storage::Page* page = pager_->getPage(current_page_id);
-        BPlusTreePage node(page);
-
-        if (node.is_leaf()) {
-            pager_->releasePage(current_page_id, false);
+    while (current_page_id != INVALID_PAGE_ID) {
+        auto node = get_node(current_page_id);
+        if (node->is_leaf()) {
+            release_node(current_page_id, false);
             return current_page_id;
         }
 
-        int index = node.find_key_index(key);
-        if (index < 0) {
-            index = -index - 1;
-        }
-
-        PageID next_page_id = node.get_child_page_id_at(index);
-        pager_->releasePage(current_page_id, false);
+        int index = node->find_key_index(key);
+        index = (index < 0) ? -index - 1 : index;
+        PageID next_page_id = node->get_child_page_id_at(index);
+        release_node(current_page_id, false);
         current_page_id = next_page_id;
     }
+
+    return INVALID_PAGE_ID;
 }
 
 bool BPlusTree::insert_recursive(PageID current_page_id, const Value& key,
                                 const RID& rid, Value* promoted_key,
                                 PageID* new_child_page_id, bool* need_split) {
-    storage::Page* page = pager_->getPage(current_page_id);
-    BPlusTreePage node(page);
+    auto node = get_node(current_page_id);
+    bool success = true;
+    bool is_dirty = false;
 
-    if (node.is_leaf()) {
-        // 叶子节点处理
-        if (!node.is_full()) {
-            // 节点未满，直接插入
-            bool success = node.insert_leaf_pair(key, rid);
-            pager_->releasePage(current_page_id, success);
+    if (node->is_leaf()) {
+        if (!node->is_full()) {
+            success = node->insert_leaf_pair(key, rid);
+            is_dirty = success;
             *need_split = false;
-            return success;
         } else {
-            // 节点已满，需要分裂
-            bool success = split_leaf_node(current_page_id, promoted_key, new_child_page_id);
-            pager_->releasePage(current_page_id, success);
-
-            if (success) {
-                *need_split = true;
-
-                // 确定新键应该插入到哪个节点
-                if (key < *promoted_key) {
-                    // 插入到原节点
-                    storage::Page* old_page = pager_->getPage(current_page_id);
-                    BPlusTreePage old_node(old_page);
-                    success = old_node.insert_leaf_pair(key, rid);
-                    pager_->releasePage(current_page_id, success);
-                } else {
-                    // 插入到新节点
-                    storage::Page* new_page = pager_->getPage(*new_child_page_id);
-                    BPlusTreePage new_node(new_page);
-                    success = new_node.insert_leaf_pair(key, rid);
-                    pager_->releasePage(*new_child_page_id, success);
-                }
-            }
+            release_node(current_page_id, false);
+            success = split_leaf_node(current_page_id, key, rid, promoted_key, new_child_page_id);
+            *need_split = true;
             return success;
         }
     } else {
-        // 内部节点处理
-        int index = node.find_key_index(key);
-        if (index < 0) {
-            index = -index - 1;
-        }
-        PageID child_page_id = node.get_child_page_id_at(index);
+        int index = node->find_key_index(key);
+        index = (index < 0) ? -index - 1 : index;
+        PageID child_page_id = node->get_child_page_id_at(index);
 
-        // 递归插入到子节点
         Value child_promoted_key;
         PageID child_new_page_id = INVALID_PAGE_ID;
         bool child_need_split = false;
 
-        bool success = insert_recursive(child_page_id, key, rid,
-                                      &child_promoted_key, &child_new_page_id,
-                                      &child_need_split);
+        success = insert_recursive(child_page_id, key, rid,
+                                  &child_promoted_key, &child_new_page_id,
+                                  &child_need_split);
 
-        if (!success) {
-            pager_->releasePage(current_page_id, false);
-            return false;
-        }
-
-        if (child_need_split) {
-            // 子节点分裂了，需要在当前节点插入提升的键
-            if (!node.is_full()) {
-                // 当前节点有空间，直接插入
-                success = node.insert_internal_pair(child_promoted_key, child_new_page_id);
-                pager_->releasePage(current_page_id, success);
+        if (success && child_need_split) {
+            if (!node->is_full()) {
+                success = node->insert_internal_pair(child_promoted_key, child_new_page_id);
+                is_dirty = success;
                 *need_split = false;
-                return success;
             } else {
-                // 当前节点也满了，需要分裂
-                success = split_internal_node(current_page_id, promoted_key, new_child_page_id);
-                pager_->releasePage(current_page_id, success);
-
-                if (success) {
-                    *need_split = true;
-
-                    // 确定提升的键应该插入到哪个节点
-                    if (child_promoted_key < *promoted_key) {
-                        // 插入到原节点
-                        storage::Page* old_page = pager_->getPage(current_page_id);
-                        BPlusTreePage old_node(old_page);
-                        success = old_node.insert_internal_pair(child_promoted_key, child_new_page_id);
-                        pager_->releasePage(current_page_id, success);
-                    } else {
-                        // 插入到新节点
-                        storage::Page* new_page = pager_->getPage(*new_child_page_id);
-                        BPlusTreePage new_node(new_page);
-                        success = new_node.insert_internal_pair(child_promoted_key, child_new_page_id);
-                        pager_->releasePage(*new_child_page_id, success);
-                    }
-                }
+                release_node(current_page_id, false);
+                success = split_internal_node(current_page_id, child_promoted_key, child_new_page_id,
+                                            promoted_key, new_child_page_id);
+                *need_split = true;
                 return success;
             }
         } else {
-            // 子节点没有分裂，直接返回
-            pager_->releasePage(current_page_id, false);
             *need_split = false;
-            return true;
         }
     }
-}
 
-bool BPlusTree::insert_into_leaf(PageID leaf_page_id, const Value& key, const RID& rid) {
-    storage::Page* page = pager_->getPage(leaf_page_id);
-    BPlusTreePage node(page);
-    bool success = node.insert_leaf_pair(key, rid);
-    pager_->releasePage(leaf_page_id, success);
+    release_node(current_page_id, is_dirty);
     return success;
 }
 
-bool BPlusTree::split_leaf_node(PageID leaf_page_id, Value* promoted_key, PageID* new_page_id) {
-    storage::Page* old_page = pager_->getPage(leaf_page_id);
-    BPlusTreePage old_node(old_page);
-
-    if (!old_node.is_leaf()) {
-        pager_->releasePage(leaf_page_id, false);
+bool BPlusTree::split_leaf_node(PageID leaf_page_id, const Value& new_key, const RID& new_rid,
+                               Value* promoted_key, PageID* new_page_id) {
+    auto old_node = get_node(leaf_page_id);
+    if (!old_node->is_leaf()) {
+        release_node(leaf_page_id, false);
         return false;
     }
 
-    // 创建新叶子节点
     *new_page_id = create_new_leaf_node();
-    storage::Page* new_page = pager_->getPage(*new_page_id);
-    BPlusTreePage new_node(new_page);
+    auto new_node = get_node(*new_page_id);
 
-    // 设置链表指针
-    new_node.set_next_page_id(old_node.get_next_page_id());
-    old_node.set_next_page_id(*new_page_id);
+    new_node->set_next_page_id(old_node->get_next_page_id());
+    old_node->set_next_page_id(*new_page_id);
 
-    // 计算分裂点
-    int total_keys = old_node.get_key_count();
+    int total_keys = old_node->get_key_count();
     int split_index = total_keys / 2;
+    *promoted_key = old_node->get_key_at(split_index);
 
-    // 获取提升的键（分裂后的第一个键）
-    *promoted_key = old_node.get_key_at(split_index);
-
-    // 将后半部分数据移动到新节点
     for (int i = split_index; i < total_keys; ++i) {
-        Value key = old_node.get_key_at(i);
-        RID rid = old_node.get_rid_at(i);
-        new_node.insert_leaf_pair(key, rid);
+        Value key = old_node->get_key_at(i);
+        RID rid = old_node->get_rid_at(i);
+        new_node->insert_leaf_pair(key, rid);
     }
 
-    // 更新原节点的键数量
-    old_node.set_key_count(split_index);
+    old_node->set_key_count(split_index);
 
-    pager_->releasePage(leaf_page_id, true);
-    pager_->releasePage(*new_page_id, true);
-    return true;
+    PageID target_page = (new_key < *promoted_key) ? leaf_page_id : *new_page_id;
+    auto target_node = get_node(target_page);
+    bool insert_success = target_node->insert_leaf_pair(new_key, new_rid);
+
+    release_node(leaf_page_id, true);
+    release_node(*new_page_id, true);
+    release_node(target_page, insert_success);
+
+    return insert_success;
 }
 
-bool BPlusTree::split_internal_node(PageID internal_page_id, Value* promoted_key, PageID* new_page_id) {
-    storage::Page* old_page = pager_->getPage(internal_page_id);
-    BPlusTreePage old_node(old_page);
-
-    if (old_node.is_leaf()) {
-        pager_->releasePage(internal_page_id, false);
+bool BPlusTree::split_internal_node(PageID internal_page_id, const Value& new_key, PageID new_child_id,
+                                  Value* promoted_key, PageID* new_page_id) {
+    auto old_node = get_node(internal_page_id);
+    if (old_node->is_leaf()) {
+        release_node(internal_page_id, false);
         return false;
     }
 
-    // 创建新内部节点
     *new_page_id = create_new_internal_node();
-    storage::Page* new_page = pager_->getPage(*new_page_id);
-    BPlusTreePage new_node(new_page);
+    auto new_node = get_node(*new_page_id);
 
-    // 计算分裂点
-    int total_keys = old_node.get_key_count();
+    int total_keys = old_node->get_key_count();
     int split_index = total_keys / 2;
+    *promoted_key = old_node->get_key_at(split_index);
 
-    // 获取提升的键
-    *promoted_key = old_node.get_key_at(split_index);
-
-    // 将后半部分键和指针移动到新节点
-    // 注意：内部节点有n+1个指针
     for (int i = split_index + 1; i < total_keys; ++i) {
-        Value key = old_node.get_key_at(i);
-        new_node.insert_internal_pair(key, old_node.get_child_page_id_at(i + 1));
+        Value key = old_node->get_key_at(i);
+        PageID child_id = old_node->get_child_page_id_at(i + 1);
+        new_node->insert_internal_pair(key, child_id);
     }
 
-    // 设置新节点的第一个子指针
-    new_node.set_child_page_id_at(0, old_node.get_child_page_id_at(split_index + 1));
+    PageID first_child_id = old_node->get_child_page_id_at(split_index + 1);
+    new_node->set_child_page_id_at(0, first_child_id);
+    old_node->set_key_count(split_index);
 
-    // 更新原节点的键数量
-    old_node.set_key_count(split_index);
+    PageID target_page = (new_key < *promoted_key) ? internal_page_id : *new_page_id;
+    auto target_node = get_node(target_page);
+    bool insert_success = target_node->insert_internal_pair(new_key, new_child_id);
 
-    pager_->releasePage(internal_page_id, true);
-    pager_->releasePage(*new_page_id, true);
-    return true;
+    release_node(internal_page_id, true);
+    release_node(*new_page_id, true);
+    release_node(target_page, insert_success);
+
+    return insert_success;
 }
 
 bool BPlusTree::create_new_root(PageID left_child_id, const Value& key, PageID right_child_id) {
-    // 创建新的根节点
     PageID new_root_id = create_new_internal_node();
-    storage::Page* root_page = pager_->getPage(new_root_id);
-    BPlusTreePage root_node(root_page);
+    auto root_node = get_node(new_root_id);
 
-    // 设置根节点的第一个子指针
-    root_node.set_child_page_id_at(0, left_child_id);
-
-    // 插入分隔键和右子指针
-    bool success = root_node.insert_internal_pair(key, right_child_id);
+    root_node->set_child_page_id_at(0, left_child_id);
+    bool success = root_node->insert_internal_pair(key, right_child_id);
 
     if (success) {
-        // 更新根页面ID
         root_page_id_ = new_root_id;
     }
 
-    pager_->releasePage(new_root_id, success);
+    release_node(new_root_id, success);
     return success;
+}
+
+bool BPlusTree::remove_from_leaf(PageID leaf_page_id, const Value& key) {
+    auto node = get_node(leaf_page_id);
+    int index = node->find_key_index(key);
+    if (index < 0) {
+        release_node(leaf_page_id, false);
+        return false;
+    }
+
+    bool success = node->remove_leaf_pair(index);
+    release_node(leaf_page_id, success);
+    return success;
+}
+
+bool BPlusTree::remove_recursive(PageID current_page_id, const Value& key, bool* need_merge) {
+    auto node = get_node(current_page_id);
+    bool success = true;
+    bool is_dirty = false;
+    *need_merge = false;
+
+    if (node->is_leaf()) {
+        int index = node->find_key_index(key);
+        if (index < 0) {
+            release_node(current_page_id, false);
+            return false;
+        }
+
+        success = node->remove_leaf_pair(index);
+        is_dirty = success;
+        *need_merge = node->is_underflow();
+    } else {
+        int index = node->find_key_index(key);
+        index = (index < 0) ? -index - 1 : index;
+        PageID child_page_id = node->get_child_page_id_at(index);
+
+        bool child_need_merge = false;
+        success = remove_recursive(child_page_id, key, &child_need_merge);
+
+        if (success && child_need_merge) {
+            success = handle_underflow(current_page_id, child_page_id, index);
+            is_dirty = success;
+            *need_merge = node->is_underflow();
+        }
+    }
+
+    release_node(current_page_id, is_dirty);
+    return success;
+}
+
+bool BPlusTree::handle_underflow(PageID parent_page_id, PageID page_id, int index) {
+    auto node = get_node(page_id);
+    bool is_underflow = node->is_underflow();
+    release_node(page_id, false);
+    return !is_underflow;
 }
 
 PageID BPlusTree::create_new_leaf_node() {
     PageID new_page_id = pager_->allocatePage();
     storage::Page* page = pager_->getPage(new_page_id);
 
-    char* page_data = page->getData();
-    BPlusNodeHeader header;
-    header.is_leaf = 1;
-    header.key_count = 0;
-    header.next_page_id = INVALID_PAGE_ID;
-    std::memcpy(page_data, &header, sizeof(BPlusNodeHeader));
+    BPlusTreePage new_node(page);
+    new_node.set_leaf(true);
+    new_node.set_key_type(key_type_);
+    new_node.initialize_page();
 
-    std::memset(page_data + sizeof(BPlusNodeHeader), 0,
-               PAGE_SIZE - sizeof(BPlusNodeHeader));
-
-    page->setDirty(true);
     pager_->releasePage(new_page_id, true);
     return new_page_id;
 }
@@ -357,19 +492,38 @@ PageID BPlusTree::create_new_internal_node() {
     PageID new_page_id = pager_->allocatePage();
     storage::Page* page = pager_->getPage(new_page_id);
 
-    char* page_data = page->getData();
-    BPlusNodeHeader header;
-    header.is_leaf = 0;
-    header.key_count = 0;
-    header.next_page_id = INVALID_PAGE_ID;
-    std::memcpy(page_data, &header, sizeof(BPlusNodeHeader));
+    BPlusTreePage new_node(page);
+    new_node.set_leaf(false);
+    new_node.set_key_type(key_type_);
+    new_node.initialize_page();
 
-    std::memset(page_data + sizeof(BPlusNodeHeader), 0,
-               PAGE_SIZE - sizeof(BPlusNodeHeader));
-
-    page->setDirty(true);
     pager_->releasePage(new_page_id, true);
     return new_page_id;
+}
+
+PageID BPlusTree::find_first_leaf_page() const {
+    if (root_page_id_ == INVALID_PAGE_ID) {
+        return INVALID_PAGE_ID;
+    }
+
+    PageID current_page_id = root_page_id_;
+
+    try {
+        while (current_page_id != INVALID_PAGE_ID) {
+            auto node = get_node(current_page_id);
+            if (node->is_leaf()) {
+                release_node(current_page_id, false);
+                return current_page_id;
+            }
+            PageID first_child = node->get_child_page_id_at(0);
+            release_node(current_page_id, false);
+            current_page_id = first_child;
+        }
+    } catch (const std::exception& e) {
+        std::cerr << "Find first leaf error: " << e.what() << std::endl;
+    }
+
+    return INVALID_PAGE_ID;
 }
 
 } // namespace engine
