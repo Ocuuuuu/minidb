@@ -19,6 +19,8 @@ if(TEST_SOURCES)
             unit_tests/test_table_info.cpp
             unit_tests/test_catalog_manager.cpp
             integration_tests/test_catalog.cpp
+            compiler_tests/query_planner_test.cpp
+            compiler_tests/query_planner_test.cpp
     )
 
     # Á´½ÓÖ÷¿â
