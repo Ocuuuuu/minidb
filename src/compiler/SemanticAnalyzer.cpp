@@ -20,6 +20,10 @@ static TypeId stringToTypeId(const string& type_str) {
         return TypeId::INTEGER;
     } else if (lower_type == "string" || lower_type == "varchar") {
         return TypeId::VARCHAR;
+    } else if (lower_type == "float") {
+        return TypeId::FLOAT;
+    } else if (lower_type == "boolean") {
+        return TypeId::BOOLEAN;
     } else {
         return TypeId::INVALID;
     }
@@ -41,6 +45,8 @@ void SemanticAnalyzer::analyze(ASTNode* ast) {
         analyzeInsert(insert_ast);
     } else if (auto select_ast = dynamic_cast<SelectAST*>(ast)) {
         analyzeSelect(select_ast);
+    } else if (auto delete_ast = dynamic_cast<DeleteAST*>(ast)) {
+        analyzeDelete(delete_ast);
     } else {
         throw SemanticError("不支持的AST节点类型");
     }
@@ -73,7 +79,7 @@ void SemanticAnalyzer::analyzeCreateTable(CreateTableAST* ast) {
         TypeId col_type = stringToTypeId(col.type);
         if (col_type == TypeId::INVALID) {
             throw SemanticError("表 '" + table_name + "' 中存在非法列类型: " +
-                                col.type + "（仅支持INT/INTEGER/STRING/VARCHAR）");
+                                col.type + "（仅支持INT/INTEGER/STRING/VARCHAR/FLOAT/BOOLEAN）");
         }
     }
 
@@ -88,6 +94,10 @@ void SemanticAnalyzer::analyzeCreateTable(CreateTableAST* ast) {
             col_length = 4; // 4字节整数
         } else if (col_type == TypeId::VARCHAR) {
             col_length = 255; // 默认255字节字符串
+        } else if (col_type == TypeId::FLOAT) {
+            col_length = 4; // 4字节浮点数
+        } else if (col_type == TypeId::BOOLEAN) {
+            col_length = 1; // 1字节布尔值
         }
 
         schema_columns.emplace_back(ast_col.name, col_type, col_length, 0);
@@ -141,6 +151,12 @@ void SemanticAnalyzer::analyzeInsert(InsertAST* ast) {
             case TypeId::VARCHAR:
                 type_str = "STRING";
                 break;
+            case TypeId::FLOAT:
+                type_str = "FLOAT";
+                break;
+            case TypeId::BOOLEAN:
+                type_str = "BOOLEAN";
+                break;
             default:
                 type_str = "UNKNOWN";
                 break;
@@ -148,7 +164,7 @@ void SemanticAnalyzer::analyzeInsert(InsertAST* ast) {
 
         if (!checkValueMatchType(value, type_str)) {
             throw SemanticError("插入失败：表 '" + table_name + "' 的列 '" + col.name +
-                                "' 类型不匹配，值为 '" + value + "'");
+                                "' 类型不匹配，期望类型 " + type_str + "，值为 '" + value + "'");
         }
     }
 }
@@ -188,43 +204,133 @@ void SemanticAnalyzer::analyzeSelect(SelectAST* ast) {
 
     // 检查WHERE条件（如果存在）
     if (ast->condition.has_value()) {
-        const Condition& cond = ast->condition.value();
-
-        try {
-            // 检查条件列是否存在
-            uint32_t col_idx = schema.get_column_index(cond.column);
-            const   MyColumn& cond_col = schema.get_column(col_idx);
-
-            // 将TypeId转换为字符串类型名，用于类型检查
-            string type_str;
-            switch (cond_col.type) {
-                case TypeId::INTEGER:
-                    type_str = "INT";
-                    break;
-                case TypeId::VARCHAR:
-                    type_str = "STRING";
-                    break;
-                default:
-                    type_str = "UNKNOWN";
-                    break;
-            }
-
-            // 检查条件值与列类型是否匹配
-            if (!checkValueMatchType(cond.value, type_str)) {
-                throw SemanticError("查询失败：条件列 '" + cond.column + "' 类型不匹配，值为 '" + cond.value + "'");
-            }
-        } catch (const out_of_range&) {
-            throw SemanticError("查询失败：表 '" + table_name + "' 中不存在条件列 '" + cond.column + "'");
-        } catch (const runtime_error&) {
-            throw SemanticError("查询失败：表 '" + table_name + "' 中不存在条件列 '" + cond.column + "'");
-        }
+        analyzeCondition(ast->condition.value(), schema, table_name);
     }
+}
+
+/**
+ * 分析DELETE语句
+ * 检查：表是否存在、WHERE条件是否合法
+ */
+void SemanticAnalyzer::analyzeDelete(DeleteAST* ast) {
+    const string& table_name = ast->tableName;
+
+    // 检查表是否存在
+    if (!catalog_manager_.table_exists(table_name)) {
+        throw SemanticError("删除失败：表 '" + table_name + "' 不存在");
+    }
+
+    // 获取表信息
+    const TableInfo* table_info = catalog_manager_.get_table(table_name);
+    if (!table_info) {
+        throw SemanticError("获取表 '" + table_name + "' 信息失败");
+    }
+    const Schema& schema = table_info->get_schema();
+
+    // 检查WHERE条件（如果存在）
+    if (ast->condition.has_value()) {
+        analyzeCondition(ast->condition.value(), schema, table_name);
+    } else {
+        // 警告：无WHERE条件的DELETE将删除所有记录
+        // 可以根据需要决定是否允许这种操作
+        // 这里我们允许，但可以添加日志记录
+    }
+}
+
+/**
+ * 分析WHERE条件表达式
+ * 检查：条件列是否存在、条件值类型是否与列类型匹配、运算符是否合法
+ */
+void SemanticAnalyzer::analyzeCondition(const Condition& cond, const Schema& schema, const string& table_name) {
+    try {
+        // 检查条件列是否存在
+        uint32_t col_idx = schema.get_column_index(cond.column);
+        const MyColumn& cond_col = schema.get_column(col_idx);
+
+        // 检查运算符是否合法
+        if (!isValidOperator(cond.op)) {
+            throw SemanticError("条件检查失败：不支持的运算符 '" + cond.op + "'");
+        }
+
+        // 将TypeId转换为字符串类型名，用于类型检查
+        string type_str;
+        switch (cond_col.type) {
+            case TypeId::INTEGER:
+                type_str = "INT";
+                break;
+            case TypeId::VARCHAR:
+                type_str = "STRING";
+                break;
+            case TypeId::FLOAT:
+                type_str = "FLOAT";
+                break;
+            case TypeId::BOOLEAN:
+                type_str = "BOOLEAN";
+                break;
+            default:
+                type_str = "UNKNOWN";
+                break;
+        }
+
+        // 检查条件值与列类型是否匹配
+        if (!checkValueMatchType(cond.value, type_str)) {
+            throw SemanticError("条件检查失败：条件列 '" + cond.column + "' 类型不匹配，期望类型 " +
+                                type_str + "，值为 '" + cond.value + "'");
+        }
+
+        // 检查运算符与数据类型的兼容性
+        if (!isOperatorCompatibleWithType(cond.op, cond_col.type)) {
+            throw SemanticError("条件检查失败：运算符 '" + cond.op + "' 不适用于类型 " + type_str);
+        }
+
+    } catch (const out_of_range&) {
+        throw SemanticError("条件检查失败：表 '" + table_name + "' 中不存在条件列 '" + cond.column + "'");
+    } catch (const runtime_error&) {
+        throw SemanticError("条件检查失败：表 '" + table_name + "' 中不存在条件列 '" + cond.column + "'");
+    }
+}
+
+/**
+ * 检查运算符是否合法
+ * @param op 运算符
+ * @return 合法返回true，否则返回false
+ */
+bool SemanticAnalyzer::isValidOperator(const string& op) {
+    static const unordered_set<string> valid_operators = {
+        "=", "!=", "<>", "<", "<=", ">", ">=", "LIKE", "NOT LIKE"
+    };
+    return valid_operators.count(op) > 0;
+}
+
+/**
+ * 检查运算符与数据类型的兼容性
+ * @param op 运算符
+ * @param type 数据类型
+ * @return 兼容返回true，否则返回false
+ */
+bool SemanticAnalyzer::isOperatorCompatibleWithType(const string& op, TypeId type) {
+    // 所有类型都支持等于和不等于比较
+    if (op == "=" || op == "!=" || op == "<>") {
+        return true;
+    }
+
+    // 大小比较运算符只适用于数值类型
+    if (op == "<" || op == "<=" || op == ">" || op == ">=") {
+        return type == TypeId::INTEGER || type == TypeId::FLOAT;
+    }
+
+    // LIKE运算符只适用于字符串类型
+    if (op == "LIKE" || op == "NOT LIKE") {
+        return type == TypeId::VARCHAR;
+    }
+
+    return false;
 }
 
 /**
  * 检查值与类型是否匹配
  * @param value 要检查的值
- * @param type 目标类型（"INT" 或 "STRING"）
+ * @param type 目标类型（"INT"、"STRING"、"FLOAT"、"BOOLEAN"）
  * @return 匹配返回true，否则返回false
  */
 bool SemanticAnalyzer::checkValueMatchType(const string& value, const string& type) {
@@ -242,9 +348,42 @@ bool SemanticAnalyzer::checkValueMatchType(const string& value, const string& ty
 
         // 检查剩余字符是否都是数字
         return all_of(value.begin() + start, value.end(), ::isdigit);
+
+    } else if (type == "FLOAT") {
+        // 检查是否为合法浮点数
+        if (value.empty()) return false;
+
+        try {
+            size_t pos;
+            stof(value, &pos);
+            // 确保整个字符串都被解析
+            return pos == value.length();
+        } catch (const invalid_argument&) {
+            return false;
+        } catch (const out_of_range&) {
+            return false;
+        }
+
+    } else if (type == "BOOLEAN") {
+        // 检查是否为合法布尔值
+        string lower_value;
+        transform(value.begin(), value.end(), back_inserter(lower_value), ::tolower);
+
+        // 移除可能的引号
+        if (lower_value.size() >= 2 &&
+            ((lower_value.front() == '"' && lower_value.back() == '"') ||
+             (lower_value.front() == '\'' && lower_value.back() == '\''))) {
+            lower_value = lower_value.substr(1, lower_value.length() - 2);
+        }
+
+        return lower_value == "true" || lower_value == "false" ||
+               lower_value == "1" || lower_value == "0";
+
     } else if (type == "STRING") {
-        // 字符串类型总是匹配（可以在这里添加更严格的检查，如引号）
+        // 字符串类型总是匹配（可以在这里添加更严格的检查，如引号、长度限制等）
         return true;
     }
+
     return false;
 }
+
