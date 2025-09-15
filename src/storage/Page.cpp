@@ -1,240 +1,212 @@
-//
-// Created by tang_ on 2025/9/9.
-//
-
-#include "../../include/storage/Page.h"
 #include "storage/Page.h"
+#include "common/Exception.h"
+#include "common/Constants.h"
 #include <cstring>
 #include <sstream>
 
 namespace minidb {
 namespace storage {
 
-Page::Page() {
-    std::memset(&header_, 0, sizeof(PageHeader));
-    std::memset(data_, 0, sizeof(data_));
-    header_.free_space = sizeof(data_);
-}
+// ====================== 构造函数 ======================
+    Page::Page() : pin_count_(0) {
+        header_.page_id = INVALID_PAGE_ID;
+        header_.page_type = PageType::DATA_PAGE;
+        // 关键修复：初始空闲空间偏移 = 数据区起始位置（槽位从0开始分配）
+        header_.free_space_offset = 0;  // 数据区开头用于存储槽位，空闲空间从0开始向后分配
+        // 数据区总大小 = 页大小 - 页头大小（确保槽位和记录有足够空间）
+        header_.free_space = PAGE_SIZE - sizeof(PageHeader);
+        header_.slot_count = 0;
+        header_.is_dirty = false;
+        header_.next_free_page = INVALID_PAGE_ID;
 
-Page::Page(PageID page_id) {
-    std::memset(&header_, 0, sizeof(PageHeader));
-    std::memset(data_, 0, sizeof(data_));
-    header_.page_id = page_id;
-    header_.free_space = sizeof(data_);
-}
-
-bool Page::insertRecord(const char* record_data, uint16_t record_size, RID* rid) {
-    // 计算所需空间：记录数据 + 槽位信息(4字节)
-    uint16_t required_space = record_size + 4;
-
-    if (!hasEnoughSpace(required_space)) {
-        // 尝试压缩页面
-        compactify();
-
-        // 再次检查空间
-        if (!hasEnoughSpace(required_space)) {
-            return false; // 空间不足
-        }
+        memset(data_, 0, sizeof(data_));
     }
 
-    // 计算新记录的偏移量
-    uint16_t record_offset = sizeof(data_) - header_.free_space;
-
-    // 复制记录数据
-    std::memcpy(data_ + record_offset, record_data, record_size);
-
-    // 更新槽位信息
-    uint16_t slot_offset = sizeof(data_) - 4 * (header_.slot_count + 1);
-    setSlotOffset(header_.slot_count, record_offset);
-    setSlotSize(header_.slot_count, record_size);
-
-    // 更新页面头
-    header_.slot_count++;
-    header_.free_space -= (record_size + 4);
-    header_.free_space_offset = record_offset + record_size;
-
-    // 设置返回的RID
-    if (rid) {
-        rid->page_id = header_.page_id;
-        rid->slot_num = header_.slot_count - 1;
+    Page::Page(PageID page_id) : Page() {
+        header_.page_id = page_id;
     }
 
-    header_.is_dirty = true;
-    return true;
-}
-
-bool Page::getRecord(const RID& rid, char* buffer, uint16_t* size) const {
-    if (rid.page_id != header_.page_id || rid.slot_num >= header_.slot_count) {
-        return false;
-    }
-
-    uint16_t offset, record_size;
-    if (!getSlotInfo(rid.slot_num, &offset, &record_size)) {
-        return false;
-    }
-
-    if (size) {
-        *size = record_size;
-    }
-
-    std::memcpy(buffer, data_ + offset, record_size);
-    return true;
-}
-
-bool Page::deleteRecord(const RID& rid) {
-    if (rid.page_id != header_.page_id || rid.slot_num >= header_.slot_count) {
-        return false;
-    }
-
-    // 标记槽位大小为0表示已删除
-    setSlotSize(rid.slot_num, 0);
-
-    header_.is_dirty = true;
-    return true;
-}
-
-bool Page::updateRecord(const RID& rid, const char* new_data, uint16_t new_size) {
-    if (rid.page_id != header_.page_id || rid.slot_num >= header_.slot_count) {
-        return false;
-    }
-
-    uint16_t old_offset, old_size;
-    if (!getSlotInfo(rid.slot_num, &old_offset, &old_size)) {
-        return false;
-    }
-
-    // 如果新数据大小与旧数据相同，可以直接覆盖
-    if (new_size == old_size) {
-        std::memcpy(data_ + old_offset, new_data, new_size);
-        header_.is_dirty = true;
-        return true;
-    }
-
-    // 如果大小不同，需要先删除旧记录，再插入新记录
-    if (!deleteRecord(rid)) {
-        return false;
-    }
-
-    RID new_rid;
-    if (!insertRecord(new_data, new_size, &new_rid)) {
-        return false;
-    }
-
-    // 更新RID（如果需要）
-    // 注意：在实际系统中，可能需要更新所有指向旧RID的引用
-
-    return true;
-}
-
-std::string Page::toString() const {
-    std::stringstream ss;
-    ss << "Page " << header_.page_id
-       << " [Slots: " << header_.slot_count
-       << ", Free: " << header_.free_space
-       << ", Dirty: " << (header_.is_dirty ? "Yes" : "No") << "]";
-    return ss.str();
-}
-
+// ====================== 序列化/反序列化 ======================
 void Page::serialize(char* dest) const {
-    // 复制页头
-    std::memcpy(dest, &header_, sizeof(PageHeader));
-
-    // 复制数据
-    std::memcpy(dest + sizeof(PageHeader), data_, sizeof(data_));
+    // 先拷贝页头（二进制拷贝，保证内存布局一致）
+    memcpy(dest, &header_, sizeof(PageHeader));
+    // 再拷贝数据区（包含槽位和记录数据）
+    memcpy(dest + sizeof(PageHeader), data_, sizeof(data_));
 }
 
 void Page::deserialize(const char* src) {
-    // 读取页头
-    std::memcpy(&header_, src, sizeof(PageHeader));
-
-    // 读取数据
-    std::memcpy(data_, src + sizeof(PageHeader), sizeof(data_));
+    // 从二进制缓冲区读取页头
+    memcpy(&header_, src, sizeof(PageHeader));
+    // 从二进制缓冲区读取数据区
+    memcpy(data_, src + sizeof(PageHeader), sizeof(data_));
 }
 
-uint16_t Page::getSlotOffset(uint16_t slot_num) const {
-    if (slot_num >= header_.slot_count) {
-        return 0;
+// ====================== 记录操作辅助：空间检查 ======================
+    bool Page::hasEnoughSpace(uint16_t required) const {
+        // 修复：每个新记录仅需要1个新槽位（4字节），而非 (slot_count + 1) 个
+        uint16_t total_needed = required + 4;  // required: 记录大小；4: 新槽位的空间（2字节偏移+2字节长度）
+        return header_.free_space >= total_needed;
     }
 
-    uint16_t slot_pos = sizeof(data_) - 4 * (slot_num + 1);
-    return *reinterpret_cast<const uint16_t*>(data_ + slot_pos);
+// ====================== 记录操作：插入 ======================
+    bool Page::insertRecord(const char* record_data, uint16_t record_size, RID* rid) {
+        // 检查空间是否足够（修复后此处应能正确判断）
+        if (!hasEnoughSpace(record_size)) {
+            return false;
+        }
+
+        // 计算记录存储位置：从当前空闲空间末尾向前分配
+        uint16_t record_offset = header_.free_space_offset + header_.free_space - record_size;
+        // 拷贝记录数据到数据区
+        memcpy(data_ + record_offset, record_data, record_size);
+
+        // 新槽位号 = 当前槽位数量（插入前）
+        uint16_t new_slot_num = header_.slot_count;
+        // 写入槽位信息（偏移和大小）到数据区开头的槽位数组
+        // 槽位存储格式：[偏移（2字节）][大小（2字节）]，按顺序存储在数据区开头
+        uint16_t* slot_offset_ptr = reinterpret_cast<uint16_t*>(data_ + new_slot_num * 4);
+        uint16_t* slot_size_ptr = slot_offset_ptr + 1;
+        *slot_offset_ptr = record_offset;  // 记录在数据区的偏移
+        *slot_size_ptr = record_size;      // 记录大小
+
+        // 更新页头信息（关键：槽位数量+1）
+        header_.slot_count++;
+        header_.free_space -= (record_size + 4);  // 空闲空间减少：记录大小 + 槽位大小
+        header_.is_dirty = true;
+
+        // 设置返回的RID
+        if (rid != nullptr) {
+            rid->page_id = header_.page_id;
+            rid->slot_num = new_slot_num;
+        }
+
+        return true;
+    }
+
+// ====================== 记录操作：查询 ======================
+bool Page::getRecord(const RID& rid, char* buffer, uint16_t* size) const {
+    // 校验RID有效性：页ID匹配 + 槽位号合法
+    if (!rid.isValid() || rid.page_id != header_.page_id || rid.slot_num >= header_.slot_count) {
+        return false;
+    }
+
+    uint16_t record_offset, record_size;
+    // 获取槽位对应的“记录偏移”和“记录长度”
+    if (!getSlotInfo(rid.slot_num, &record_offset, &record_size)) {
+        return false;
+    }
+
+    // 将数据区的记录拷贝到输出缓冲区
+    memcpy(buffer, data_ + record_offset, record_size);
+    // 若需要返回记录长度，填充size
+    if (size != nullptr) {
+        *size = record_size;
+    }
+
+    return true;
 }
 
-void Page::setSlotOffset(uint16_t slot_num, uint16_t offset) {
-    if (slot_num >= header_.slot_count) {
-        return;
+// ====================== 记录操作：删除 ======================
+bool Page::deleteRecord(const RID& rid) {
+    // 校验RID有效性
+    if (!rid.isValid() || rid.page_id != header_.page_id || rid.slot_num >= header_.slot_count) {
+        return false;
     }
 
-    uint16_t slot_pos = sizeof(data_) - 4 * (slot_num + 1);
-    *reinterpret_cast<uint16_t*>(data_ + slot_pos) = offset;
+    uint16_t record_offset, record_size;
+    // 获取槽位对应的“记录偏移”和“记录长度”
+    if (!getSlotInfo(rid.slot_num, &record_offset, &record_size)) {
+        return false;
+    }
+
+    // 简单删除：将槽位的“记录长度”设为0（标记为已删除，实际可后续压缩）
+    setSlotSize(rid.slot_num, 0);
+    header_.is_dirty = true; // 标记为脏页
+
+    return true;
 }
 
-uint16_t Page::getSlotSize(uint16_t slot_num) const {
-    if (slot_num >= header_.slot_count) {
-        return 0;
+// ====================== 记录操作：更新 ======================
+    bool Page::updateRecord(const RID& rid, const char* new_data, uint16_t new_size, RID* new_rid) {
+    // 校验旧RID的有效性
+    if (rid.slot_num >= header_.slot_count || rid.page_id != header_.page_id) {
+        throw InvalidRIDException(rid);
     }
 
-    uint16_t slot_pos = sizeof(data_) - 4 * (slot_num + 1) + 2;
-    return *reinterpret_cast<const uint16_t*>(data_ + slot_pos);
+    // 标记旧记录为删除（仅置零长度，不删除槽位）
+    setSlotSize(rid.slot_num, 0);
+
+    // 插入新记录（会生成新槽位）
+    bool inserted = insertRecord(new_data, new_size, new_rid);
+    if (inserted) {
+        header_.is_dirty = true;
+    }
+    return inserted;
 }
 
-void Page::setSlotSize(uint16_t slot_num, uint16_t size) {
+// ====================== 槽位操作：辅助方法 ======================
+    uint16_t Page::getSlotOffset(uint16_t slot_num) const {
+    // 修复：slot_num 必须小于当前槽位总数（slot_count）
     if (slot_num >= header_.slot_count) {
-        return;
+        std::string msg = "Slot " + std::to_string(slot_num) + " out of range (page " +
+                          std::to_string(header_.page_id) + "), total slots: " + std::to_string(header_.slot_count);
+        throw InvalidSlotException(msg);
     }
+    return *reinterpret_cast<const uint16_t*>(data_ + slot_num * 4);
+}
 
-    uint16_t slot_pos = sizeof(data_) - 4 * (slot_num + 1) + 2;
-    *reinterpret_cast<uint16_t*>(data_ + slot_pos) = size;
+    // 同理修复 setSlotOffset、getSlotSize、setSlotSize 方法的边界检查
+    void Page::setSlotOffset(uint16_t slot_num, uint16_t offset) {
+    if (slot_num >= header_.slot_count) {
+        std::string msg = "Slot " + std::to_string(slot_num) + " out of range (page " +
+                          std::to_string(header_.page_id) + "), total slots: " + std::to_string(header_.slot_count);
+        throw InvalidSlotException(msg);
+    }
+    *reinterpret_cast<uint16_t*>(data_ + slot_num * 4) = offset;
+}
+
+    uint16_t Page::getSlotSize(uint16_t slot_num) const {
+    if (slot_num >= header_.slot_count) {
+        std::string msg = "Slot " + std::to_string(slot_num) + " out of range (page " +
+                          std::to_string(header_.page_id) + "), total slots: " + std::to_string(header_.slot_count);
+        throw InvalidSlotException(msg);
+    }
+    return *reinterpret_cast<const uint16_t*>(data_ + slot_num * 4 + 2);
+}
+
+    void Page::setSlotSize(uint16_t slot_num, uint16_t size) {
+    if (slot_num >= header_.slot_count) {
+        std::string msg = "Slot " + std::to_string(slot_num) + " out of range (page " +
+                          std::to_string(header_.page_id) + "), total slots: " + std::to_string(header_.slot_count);
+        throw InvalidSlotException(msg);
+    }
+    *reinterpret_cast<uint16_t*>(data_ + slot_num * 4 + 2) = size;
 }
 
 bool Page::getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) const {
     if (slot_num >= header_.slot_count) {
         return false;
     }
-
-    uint16_t slot_pos = sizeof(data_) - 4 * (slot_num + 1);
-    if (offset) {
-        *offset = *reinterpret_cast<const uint16_t*>(data_ + slot_pos);
-    }
-    if (size) {
-        *size = *reinterpret_cast<const uint16_t*>(data_ + slot_pos + 2);
-    }
-    return true;
+    *offset = getSlotOffset(slot_num);
+    *size = getSlotSize(slot_num);
+    return *size != 0; // 长度为0表示记录已被删除
 }
 
+// ====================== 页面压缩（简化版，暂未实现完整逻辑） ======================
 void Page::compactify() {
-    // 创建临时缓冲区
-    char temp_data[sizeof(data_)];
-    std::memset(temp_data, 0, sizeof(temp_data));
+    throw NotImplementedException("Page compactify not implemented yet");
+}
 
-    uint16_t current_offset = 0;
-
-    // 重新组织有效记录
-    for (uint16_t i = 0; i < header_.slot_count; i++) {
-        uint16_t offset, size;
-        if (getSlotInfo(i, &offset, &size) && size > 0) {
-            // 复制有效记录到新位置
-            std::memcpy(temp_data + current_offset, data_ + offset, size);
-
-            // 更新槽位偏移
-            setSlotOffset(i, current_offset);
-
-            // 更新当前偏移
-            current_offset += size;
-        }
-    }
-
-    // 更新空闲空间信息
-    header_.free_space = sizeof(data_) - current_offset - 4 * header_.slot_count;
-    header_.free_space_offset = current_offset;
-
-    // 复制回数据区域
-    std::memcpy(data_, temp_data, current_offset);
-
-    // 清空剩余空间
-    std::memset(data_ + current_offset, 0, sizeof(data_) - current_offset);
-
-    header_.is_dirty = true;
+// ====================== 调试辅助：转为字符串 ======================
+std::string Page::toString() const {
+    std::stringstream ss;
+    ss << "Page { ID: " << header_.page_id
+       << ", Type: " << static_cast<int>(header_.page_type)
+       << ", Slot Count: " << header_.slot_count
+       << ", Free Space: " << header_.free_space
+       << ", Dirty: " << (header_.is_dirty ? "true" : "false")
+       << " }";
+    return ss.str();
 }
 
 } // namespace storage
