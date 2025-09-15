@@ -197,6 +197,20 @@ void Page::compactify() {
     throw NotImplementedException("Page compactify not implemented yet");
 }
 
+bool Page::getNextRecord(RID& rid) {
+        // 找到下一个有效的记录
+        while (rid.slot_num < header_.slot_count) {
+            uint16_t record_size = getSlotSize(rid.slot_num); // 获取当前槽位的记录大小
+            if (record_size > 0) { // 如果记录有效
+                return true; // 找到有效记录，返回 true
+            }
+            rid.slot_num++; // 移动到槽位的下一个位置
+        }
+
+        // 没有更多有效记录
+        return false;
+    }
+
 // ====================== 调试辅助：转为字符串 ======================
 std::string Page::toString() const {
     std::stringstream ss;

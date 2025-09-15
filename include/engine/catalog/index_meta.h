@@ -1,7 +1,7 @@
 #pragma once
 
-#include "common/Types.h"
-#include "common/Constants.h"
+#include "../include/common/Types.h"
+#include "../include/common/Constants.h"
 #include <string>
 #include <cstring> // for std::memcpy
 
