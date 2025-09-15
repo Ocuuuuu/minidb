@@ -14,7 +14,6 @@ include_directories(include)
 # 创建主可执行文件
 add_executable(minidb ${SOURCES})
 
-
 # 创建库目标用于测试
 add_library(minidb_lib ${SOURCES})
 target_include_directories(minidb_lib PUBLIC include)

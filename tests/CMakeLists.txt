@@ -1,39 +1,46 @@
-# è®¾ç½®C++æ ‡å‡†
+# ÉèÖÃC++±ê×¼
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# è‡ªåŠ¨æŸ¥æ‰¾æ‰€æœ‰æµ‹è¯•æ–‡ä»¶ï¼ˆåŒ…æ‹¬ test_main.cppï¼‰
+
+# ×Ô¶¯²éÕÒËùÓĞ²âÊÔÎÄ¼ş£¨°üÀ¨ test_main.cpp£©
 file(GLOB_RECURSE TEST_SOURCES
-        "*.cpp"                    # è¿™ä¼šåŒ…å« tests/ æ ¹ç›®å½•ä¸‹çš„ test_main.cpp
+        "*.cpp"                    # Õâ»á°üº¬ tests/ ¸ùÄ¿Â¼ÏÂµÄ test_main.cpp
         "unit_tests/*.cpp"
         "integration_tests/*.cpp"
+        "compiler_tests/*.cpp"
 )
 
-# æ·»åŠ  Catch2 çš„å®ç°æ–‡ä»¶ï¼ˆè¿™æ˜¯è§£å†³é“¾æ¥é”™è¯¯çš„å…³é”®ï¼ï¼‰
+# Ìí¼Ó Catch2 µÄÊµÏÖÎÄ¼ş£¨ÕâÊÇ½â¾öÁ´½Ó´íÎóµÄ¹Ø¼ü£¡£©
 list(APPEND TEST_SOURCES "catch2/catch_amalgamated.cpp")
 
 if(TEST_SOURCES)
-    # åˆ›å»ºæµ‹è¯•å¯æ‰§è¡Œæ–‡ä»¶
+    # ´´½¨²âÊÔ¿ÉÖ´ĞĞÎÄ¼ş
     add_executable(minidb_tests ${TEST_SOURCES}
             unit_tests/test_schema.cpp
             unit_tests/test_table_info.cpp
             unit_tests/test_catalog_manager.cpp
             integration_tests/test_catalog.cpp
+            compiler_tests/lexer_test.cpp
+            compiler_tests/parser_test.cpp
+            compiler_tests/semantic_test.cpp
     )
 
-    # é“¾æ¥ä¸»åº“
-    target_link_libraries(minidb_tests minidb_lib)
+    # Á´½ÓÖ÷¿âºÍ
+    target_link_libraries(minidb_tests
+            minidb_lib
+    )
 
-    # åŒ…å«å¤´æ–‡ä»¶ç›®å½•
+    # °üº¬Í·ÎÄ¼şÄ¿Â¼
     target_include_directories(minidb_tests PRIVATE
-            ${CMAKE_SOURCE_DIR}/include        # ä¸»é¡¹ç›®çš„å¤´æ–‡ä»¶
-            ${CMAKE_CURRENT_SOURCE_DIR}        # å½“å‰æµ‹è¯•ç›®å½•çš„å¤´æ–‡ä»¶
+            ${CMAKE_SOURCE_DIR}/include        # Ö÷ÏîÄ¿µÄÍ·ÎÄ¼ş
+            ${CMAKE_CURRENT_SOURCE_DIR}        # µ±Ç°²âÊÔÄ¿Â¼µÄÍ·ÎÄ¼ş
     )
 
-    # æ·»åŠ æµ‹è¯•
+    # Ìí¼Ó²âÊÔ
     add_test(NAME MinidbTests COMMAND minidb_tests)
 
-    # ç¼–è¯‘é€‰é¡¹
+    # ±àÒëÑ¡Ïî
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(minidb_tests PRIVATE -Wall -Wextra)
     endif()

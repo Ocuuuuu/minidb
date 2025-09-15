@@ -81,26 +81,26 @@ namespace minidb {
         /**
          * @brief 从AST创建新表
          * @param create_ast CREATE TABLE语句的AST节点
-         * @return true-创建成功, false-表已存在或创建失败
+         * @return true-创建成功, false-表已存在或创建失�?
          */
         bool create_table_from_ast(const CreateTableAST& create_ast);
 
         /**
          * @brief 验证INSERT语句的AST是否有效
          * @param insert_ast INSERT语句的AST节点
-         * @return true-语句有效, false-表不存在或列不匹配
+         * @return true-语句有效, false-表不存在或列不匹�?
          */
         bool validate_insert_ast(const InsertAST& insert_ast) const;
 
         /**
          * @brief 验证SELECT语句的AST是否有效
          * @param select_ast SELECT语句的AST节点
-         * @return true-语句有效, false-表不存在或列不存在
+         * @return true-语句有效, false-表不存在或列不存�?
          */
         bool validate_select_ast(const SelectAST& select_ast) const;
 
         /**
-         * @brief 获取表的Schema信息（用于AST执行）
+         * @brief 获取表的Schema信息（用于AST执行�?
          * @param table_name 表名
          * @return Schema的共享指针，如果表不存在则返回nullptr
          */
@@ -115,16 +115,16 @@ namespace minidb {
         // ==================== 新增私有方法 ====================
         /**
          * @brief 将AST中的字符串类型转换为TypeId枚举
-         * @param type_str 类型字符串（如 "INT", "STRING", "BOOLEAN"）
-         * @return 对应的TypeId枚举值
-         * @throw std::invalid_argument 如果类型字符串无效
+         * @param type_str 类型字符串（�? "INT", "STRING", "BOOLEAN"�?
+         * @return 对应的TypeId枚举�?
+         * @throw std::invalid_argument 如果类型字符串无�?
          */
         TypeId convert_ast_type_to_typeid(const std::string& type_str) const;
 
         /**
-         * @brief 计算VARCHAR类型的合适长度
-         * @param type_str 类型字符串（如 "STRING" 或 "VARCHAR(255)"）
-         * @return 计算得到的长度
+         * @brief 计算VARCHAR类型的合适长�?
+         * @param type_str 类型字符串（�? "STRING" �? "VARCHAR(255)"�?
+         * @return 计算得到的长�?
          */
         uint32_t calculate_varchar_length(const std::string& type_str) const;
     };
