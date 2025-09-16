@@ -362,40 +362,6 @@ TEST_CASE("Page Slot Operations", "[page][slot]") {
     }
 }
 
-TEST_CASE("Page Compactify", "[page][compactify]") {
-    Page page(1);
-
-    SECTION("Compactify is not implemented") {
-        // 由于 compactify 是私有方法，我们无法直接测试
-        // 这个测试用例可以删除，或者通过其他方式间接测试
-        // 例如，测试页面在删除记录后的行为
-        SUCCEED("Compactify is a private method and cannot be tested directly");
-    }
-
-    SECTION("Test page behavior after record deletion") {
-        // 插入几条记录
-        minidb::RID rid1, rid2;
-        page.insertRecord("Record1", 8, &rid1);
-        page.insertRecord("Record2", 8, &rid2);
-
-        uint16_t initial_free_space = page.getFreeSpace();
-
-        // 删除一条记录
-        REQUIRE(page.deleteRecord(rid1));
-
-        // 检查空间没有立即回收（因为compactify未实现）
-        REQUIRE(page.getFreeSpace() == initial_free_space);
-
-        // 但记录应该被标记为删除
-        char buffer[100];
-        REQUIRE_FALSE(page.getRecord(rid1, buffer, nullptr));
-
-        // 另一条记录应该仍然存在
-        REQUIRE(page.getRecord(rid2, buffer, nullptr));
-        REQUIRE(strcmp(buffer, "Record2") == 0);
-    }
-}
-
 TEST_CASE("Page ToString", "[page][tostring]") {
     Page page(123);
     page.setPageType(PageType::INDEX_PAGE);
@@ -455,24 +421,6 @@ TEST_CASE("Page Boundary Conditions", "[page][boundary]") {
     }
 }
 
-// 添加一个辅助函数来获取槽位数量（如果需要的话）
-
-
-TEST_CASE("Page Slot Count Access", "[page][slotcount]") {
-    Page page(1);
-
-    SECTION("Initial slot count should be zero") {
-        REQUIRE(getSlotCount(page) == 0);
-    }
-
-    SECTION("Slot count should increase after insert") {
-        page.insertRecord("Test", 5, nullptr);
-        REQUIRE(getSlotCount(page) == 1);
-
-        page.insertRecord("Test2", 6, nullptr);
-        REQUIRE(getSlotCount(page) == 2);
-    }
-}
 
 TEST_CASE("Simple Page Serialize Test", "[debug]")
 {

@@ -321,15 +321,3 @@ TEST_CASE("Pager Integration with BufferManager", "[storage][pager][integration]
     }
 }
 
-// TEST_CASE("Pager Checkpoint Functionality", "[storage][pager]") {
-//     auto file_manager = std::make_shared<minidb::storage::FileManager>();
-//     file_manager->openDatabase("test_db_checkpoint");
-//     auto disk_manager = std::make_shared<minidb::storage::DiskManager>(file_manager);
-//     auto buffer_manager = std::make_shared<minidb::storage::BufferManager>(disk_manager, 10);
-//     minidb::storage::Pager pager(disk_manager, buffer_manager);
-//
-//     SECTION("Checkpoint method exists and can be called") {
-//         // Should not throw (even if not implemented)
-//         pager.checkpoint();
-//     }
-// }

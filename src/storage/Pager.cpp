@@ -103,8 +103,8 @@ namespace minidb {
                 return false;
             }
 
-            std::lock_guard<std::mutex> lock(pager_mutex_);
-            return allocated_pages_.find(page_id) != allocated_pages_.end();
+            // 直接查询DiskManager的页面分配状态
+            return disk_manager_->isPageAllocated(page_id);
         }
 
 

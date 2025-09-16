@@ -333,5 +333,69 @@ void DiskManager::writeHeader(bool require_lock) {
     std::cout << "Header written successfully" << std::endl;
 }
 
+
+    // ============ 新增方法实现 ============
+
+    bool DiskManager::isPageAllocated(PageID page_id) const {
+    std::lock_guard<std::mutex> lock(io_mutex_);
+
+    if (page_id == INVALID_PAGE_ID || page_id < 0 || page_id >= page_count_) {
+        return false;
+    }
+
+    // 页面0总是已分配（头页面）
+    if (page_id == 0) {
+        return true;
+    }
+
+    // 检查页面是否在空闲列表中
+    PageID current = free_list_head_;
+    while (current != INVALID_PAGE_ID) {
+        if (current == page_id) {
+            return false; // 在空闲列表中，未分配
+        }
+        current = getNextFreePage(current);
+    }
+
+    return true; // 不在空闲列表中，已分配
+}
+
+    PageID DiskManager::getNextFreePage(PageID page_id) const {
+    if (page_id == INVALID_PAGE_ID || page_id >= page_count_) {
+        return INVALID_PAGE_ID;
+    }
+
+    // 读取页面的第一个sizeof(PageID)字节作为下一个空闲页面的指针
+    char page_data[PAGE_SIZE];
+
+    try {
+        // 使用现有的readPage方法，但不获取锁（因为我们已经持有锁）
+        const_cast<DiskManager*>(this)->readPage(page_id, page_data, false);
+        return *reinterpret_cast<PageID*>(page_data);
+    } catch (const std::exception& e) {
+        std::cerr << "Error reading next free page from page " << page_id
+                  << ": " << e.what() << std::endl;
+        return INVALID_PAGE_ID;
+    }
+}
+
+    void DiskManager::setNextFreePage(PageID page_id, PageID next_page_id) {
+    if (page_id == INVALID_PAGE_ID || page_id >= page_count_) {
+        return;
+    }
+
+    // 准备页面数据：将下一个空闲页面的指针写入页面的开头
+    char page_data[PAGE_SIZE];
+    std::memset(page_data, 0, PAGE_SIZE);
+    *reinterpret_cast<PageID*>(page_data) = next_page_id;
+
+    try {
+        // 使用现有的writePage方法，但不获取锁
+        writePage(page_id, page_data, false);
+    } catch (const std::exception& e) {
+        std::cerr << "Error setting next free page for page " << page_id
+                  << ": " << e.what() << std::endl;
+    }
+}
 } // namespace storage
 } // namespace minidb
