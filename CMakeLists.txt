@@ -15,7 +15,9 @@ include_directories(include)
 add_executable(minidb ${SOURCES}
         src/main.cpp
         include/common/QueryResult.h
-        include/common/Condition.h)
+        include/common/Condition.h
+        include/compiler/QueryPlanner.h
+        include/compiler/PlanNode.h)
 
 # 创建库目标用于测试
 add_library(minidb_lib ${SOURCES})

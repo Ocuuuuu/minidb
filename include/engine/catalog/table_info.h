@@ -27,6 +27,7 @@ namespace minidb {
         const std::string& get_table_name() const { return table_name_; } ///< 获取表名
         const Schema& get_schema() const { return schema_; } ///< 获取表结构模式
         uint32_t get_table_id() const { return table_id_; } ///< 获取表ID
+
         PageID getFirstPageID() const { return first_page_id_; } ///< 获取第一页ID
 
         /**

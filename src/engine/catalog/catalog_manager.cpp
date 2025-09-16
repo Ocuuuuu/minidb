@@ -2,6 +2,10 @@
 #include <algorithm> // 用于std::sort排序
 #include <cctype>   // 用于字符处理
 #include <sstream>  // 用于字符串流处理
+#include "../include/engine/catalog/catalog_manager.h"
+#include <algorithm> // 用于std::sort排序
+#include <cctype>   // 用于字符处理
+#include <sstream>  // 用于字符串流处理
 
 namespace minidb {
 
@@ -12,20 +16,18 @@ namespace minidb {
      * @return true-创建成功, false-表已存在
      * @details 检查表名是否已存在，不存在则创建新的TableInfo对象并添加到目录中
      */
-    bool CatalogManager::create_table(const std::string& table_name, const Schema& schema) {
+
+bool CatalogManager::create_table(const std::string& table_name, const Schema& schema) {
         // 首先检查表是否已存在，避免重复创建
         if (table_exists(table_name)) {
             return false; // 表名已存在，创建失败
         }
 
-        // 使用emplace直接在map中构造键值对，避免额外的拷贝操作
-        // make_unique创建TableInfo对象，智能指针自动管理内存
-        auto result = tables_.emplace(table_name, std::make_unique<TableInfo>(table_name, schema));
+        PageID first_page_id = 0; // 根据具体需求设置默认值，或者调用分配页面的逻辑
+        auto result = tables_.emplace(table_name, std::make_unique<TableInfo>(table_name, schema, first_page_id));
 
-        // emplace返回pair<iterator, bool>，second表示是否插入成功
         return result.second;
     }
-
     /**
      * @brief 删除表
      * @param table_name 要删除的表名
@@ -255,6 +257,8 @@ namespace minidb {
         }
     }
 
+
+
     /**
      * @brief 计算VARCHAR类型的合适长度
      * @param type_str 类型字符串（如 "STRING" 或 "VARCHAR(255)"）
@@ -283,4 +287,22 @@ namespace minidb {
             return 255; // 转换失败，使用默认值
         }
     }
-} // namespace minidb
+
+
+
+    TypeId CatalogManager::getTypeIdFromString(const std::string& type_str) const {
+    std::string normalized_type = type_str;
+    std::transform(normalized_type.begin(), normalized_type.end(), normalized_type.begin(), ::toupper);
+
+    if (normalized_type == "INT" || normalized_type == "INTEGER") {
+        return TypeId::INTEGER;
+    } else if (normalized_type == "VARCHAR" || normalized_type == "STRING") {
+        return TypeId::VARCHAR;
+    } else if (normalized_type == "BOOLEAN" || normalized_type == "BOOL") {
+        return TypeId::BOOLEAN;
+    }
+
+    return TypeId::INVALID; // 若类型不匹配，返回无效类型
+}
+
+} // namespace minidb} // namespace minidb

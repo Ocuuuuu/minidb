@@ -25,8 +25,13 @@ struct Column {
 //条件表达式（用于WHERE子句，如 "age > 20"）
 struct Condition {
     string column;  //列名（如 "age"）
-    string op;      //运算符（如 ">"、"="）
+    string op;      //运算符（如 ">"、"="、"<"）
     string value;   //值（如 "20"）
+
+    // 可选构造函数，便于使用
+    Condition(string col, string oper, string val)
+        : column(std::move(col)), op(std::move(oper)), value(std::move(val)) {}
+
 };
 
 //CREATE TABLE语句的AST节点
@@ -54,7 +59,7 @@ public:
 //DELETE语句的AST节点
 class DeleteAST : public ASTNode {
 public:
-    string tableName;               //表名（如 "Students"）
-    optional<Condition> condition;  //WHERE 条件（可选，用 optional 表示可能不存在）
+    std::string tableName;               //表名（如 "Students"）
+    std::optional<Condition> condition;  //WHERE 条件（可选，用 optional 表示可能不存在）
 };
 #endif //MINIDB_AST_H

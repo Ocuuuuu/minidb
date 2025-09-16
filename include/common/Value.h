@@ -34,6 +34,8 @@ namespace minidb {
         bool equals(const Value& other) const;
         bool lessThan(const Value& other) const;
         bool greaterThan(const Value& other) const;
+        bool lessThanOrEquals(const Value& other) const; // 新增
+        bool greaterThanOrEquals(const Value& other) const; // 新增
 
         // 算术操作（简易版）
         Value add(const Value& other) const;

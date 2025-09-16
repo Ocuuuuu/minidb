@@ -99,12 +99,21 @@ namespace minidb {
          */
         bool validate_select_ast(const SelectAST& select_ast) const;
 
+
+        // 根据类型字符串返回对应的 TypeId
+        TypeId getTypeIdFromString(const std::string& type_str) const;
+
         /**
          * @brief 鑾峰彇琛ㄧ殑Schema淇℃伅锛堢敤浜嶢ST鎵ц锛?
          * @param table_name 琛ㄥ悕
          * @return Schema鐨勫叡浜寚閽堬紝濡傛灉琛ㄤ笉瀛樺湪鍒欒繑鍥瀗ullptr
          */
         std::shared_ptr<Schema> get_table_schema(const std::string& table_name) const;
+
+
+        TypeId getTypeIdFromAST(const std::string& type_str) const {
+            return convert_ast_type_to_typeid(type_str);
+        }
 
     private:
         /// 表信息存储容器：表名到TableInfo的映射

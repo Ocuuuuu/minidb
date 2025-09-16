@@ -98,8 +98,8 @@ std::ostream& operator<<(std::ostream& os, const Value& value) {
 
 
 
-    // 在 Value.cpp 末尾添加以下实现
 
+//小于
 bool Value::lessThan(const Value& other) const {
     if (type_id_ != other.type_id_) {
         throw TypeMismatchException("Cannot compare values of different types: " +
@@ -123,7 +123,7 @@ bool Value::lessThan(const Value& other) const {
                                        std::string(getTypeName(type_id_)));
     }
 }
-
+    //大于
 bool Value::greaterThan(const Value& other) const {
     if (type_id_ != other.type_id_) {
         throw TypeMismatchException("Cannot compare values of different types: " +
@@ -142,6 +142,56 @@ bool Value::greaterThan(const Value& other) const {
             return std::get<int32_t>(value_) > std::get<int32_t>(other.value_);
         case TypeId::VARCHAR:
             return std::get<std::string>(value_) > std::get<std::string>(other.value_);
+        default:
+            throw TypeMismatchException("Unsupported type for comparison: " +
+                                       std::string(getTypeName(type_id_)));
+    }
+}
+
+
+//小于或等于
+bool Value::lessThanOrEquals(const Value& other) const {
+    if (type_id_ != other.type_id_) {
+        throw TypeMismatchException("Cannot compare values of different types: " +
+                                   std::string(getTypeName(type_id_)) + " and " +
+                                   std::string(getTypeName(other.type_id_)));
+    }
+
+    if (isNull() || other.isNull()) {
+        throw NullValueException("Cannot compare null values");
+    }
+
+    switch (type_id_) {
+        case TypeId::BOOLEAN:
+            return std::get<bool>(value_) <= std::get<bool>(other.value_);
+        case TypeId::INTEGER:
+            return std::get<int32_t>(value_) <= std::get<int32_t>(other.value_);
+        case TypeId::VARCHAR:
+            return std::get<std::string>(value_) <= std::get<std::string>(other.value_);
+        default:
+            throw TypeMismatchException("Unsupported type for comparison: " +
+                                       std::string(getTypeName(type_id_)));
+    }
+}
+//大于或等于
+bool Value::greaterThanOrEquals(const Value& other) const {
+    if (type_id_ != other.type_id_) {
+        throw TypeMismatchException("Cannot compare values of different types: " +
+                                   std::string(getTypeName(type_id_)) + " and " +
+                                   std::string(getTypeName(other.type_id_)));
+    }
+
+    if (isNull() || other.isNull()) {
+        throw NullValueException("Cannot compare null values");
+    }
+
+    switch (type_id_) {
+        case TypeId::BOOLEAN:
+            return std::get<bool>(value_) >= std::get<bool>(other.value_);
+        case TypeId::INTEGER:
+            return std::get<int32_t>(value_) >= std::get<int32_t>(other.value_);
+        case TypeId::VARCHAR:
+            return std::get<std::string>(value_) >= std::get<std::string>(other.value_);
         default:
             throw TypeMismatchException("Unsupported type for comparison: " +
                                        std::string(getTypeName(type_id_)));
