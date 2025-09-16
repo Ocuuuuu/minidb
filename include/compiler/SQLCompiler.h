@@ -17,7 +17,7 @@ namespace minidb
     class SQLCompiler {
     public:
         explicit SQLCompiler(CatalogManager& catalog);
-        std::unordered_map<std::string, std::string> compile(const std::string& sql);
+        nlohmann::json compile(const std::string& sql);
 
     private:
         CatalogManager& catalogManager;

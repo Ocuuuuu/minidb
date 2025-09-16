@@ -9,13 +9,14 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include "../../include/compiler/AST.h"
 
 using namespace std;
 
 //语法分析器类：基于LL(1)文法，将Token序列转换为AST
 class Parser {
 private:
-    Lexer& lexer;//词法分析器（用于获取Token）
+    Lexer* lexer; // 改为指针类型，而不是引用
     Token currentToken;//当前处理的Token
     stack<string> symStack;//语法栈（存储非终结符/终结符）
     vector<Token> tokens;//缓存所有Token（便于处理）
@@ -23,6 +24,12 @@ private:
 
     //预测分析表：key为"非终结符|当前Token值"，value为产生式（字符串列表）
     unordered_map<string, vector<string>> predictTable;
+
+    ASTNodePtr generateAST() {
+        // 根据当前解析状态生成 AST
+        // 示例：返回一个空的 AST 节点（需根据实际逻辑修改）
+        return std::make_unique<ASTNode>();
+    }
 
     //分隔符常量定义（统一管理，避免硬编码错误）
     const string LPAREN = "LPAREN";// 左括号 (
@@ -33,10 +40,6 @@ private:
 
     //初始化预测分析表（核心！定义LL(1)文法的产生式）
     void initPredictTable();
-
-    // //调试辅助函数
-    // void debugString(const string& s, const string& label);
-    // void debugState();
 
     //解析非终结符：根据预测表压入对应产生式
     void parseNonTerminal(const string& nonTerminal);
@@ -62,6 +65,16 @@ private:
     //解析列列表（如"name STRING, age INT"）
     vector<Column> parseColumnList();
     bool isNonTerminal(const string& symbol);
+
+    bool isTerminal(const std::string& symbol) const {
+        // 终结符包括关键字、标识符、常量、运算符、分隔符等
+        return symbol == "EOF" ||
+               symbol == "KEYWORD" ||
+               symbol == "IDENTIFIER" ||
+               symbol == "CONSTANT" ||
+               symbol == "OPERATOR" ||
+               symbol == "DELIMITER";
+    }
 
     //解析列列表的递归部分（处理逗号分隔的后续列）
     void parseColumnListPrime();
@@ -96,6 +109,9 @@ private:
 public:
     //构造函数：接收词法分析器，初始化语法栈和预测表
     explicit Parser(Lexer& l);
+
+    // 新构造函数：直接接受token序列
+    Parser(const std::vector<Token>& tokens);
 
     //核心方法：执行语法分析，返回AST根节点
     unique_ptr<ASTNode> parse();

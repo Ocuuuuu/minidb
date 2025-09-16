@@ -8,6 +8,7 @@
  */
 
 #include "../../include/compiler/Parser.h"
+#include "../../include/compiler/AST.h"
 
 #include <algorithm>
 #include <iostream>
@@ -42,9 +43,119 @@ static std::string tokensToString(const std::vector<Token>& tokens) {
     return result;
 }
 
-//构造函数
+// match函数完整实现
+void Parser::match(const string& expectedValue) {
+    // 生成当前Token的标识
+    string currentTokenKey;
+    if (currentToken.type == TokenType::KEYWORD) {
+        string keywordValue = currentToken.value;
+        transform(keywordValue.begin(), keywordValue.end(), keywordValue.begin(), ::toupper);
+        currentTokenKey = "KEYWORD(" + keywordValue + ")";
+    } else if (currentToken.type == TokenType::IDENTIFIER) {
+        currentTokenKey = "IDENTIFIER";
+        // 兼容处理：无引号字符串按CONSTANT匹配（针对INSERT值列表）
+        if (expectedValue == "CONSTANT") {
+            currentTokenKey = "CONSTANT";
+        }
+    } else if (currentToken.type == TokenType::CONSTANT) {
+        currentTokenKey = "CONSTANT";
+    } else if (currentToken.type == TokenType::OPERATOR) {
+        if (currentToken.value == "*") {
+            currentTokenKey = STAR;
+        } else {
+            currentTokenKey = "OPERATOR";
+        }
+    } else if (currentToken.type == TokenType::DELIMITER) {
+        if (currentToken.value == "(") {
+            currentTokenKey = LPAREN;
+        } else if (currentToken.value == ")") {
+            currentTokenKey = RPAREN;
+        } else if (currentToken.value == ",") {
+            currentTokenKey = COMMA;
+        } else if (currentToken.value == ";") {
+            currentTokenKey = SEMICOLON;
+        } else if (currentToken.value == "*") {
+            currentTokenKey = STAR;
+        } else {
+            currentTokenKey = "DELIMITER(" + currentToken.value + ")";
+        }
+    } else if (currentToken.type == TokenType::EOF_TOKEN) {
+        currentTokenKey = "EOF";
+    } else {
+        throw runtime_error("未知Token类型: " + to_string(static_cast<int>(currentToken.type)));
+    }
+
+    // 检查类型关键字匹配
+    bool isTypeMatch = false;
+    if (expectedValue == "KEYWORD(TYPE)") {
+        isTypeMatch = (currentTokenKey == "KEYWORD(INT)" ||
+                      currentTokenKey == "KEYWORD(INTEGER)" ||
+                      currentTokenKey == "KEYWORD(STRING)" ||
+                      currentTokenKey == "KEYWORD(VARCHAR)" ||
+                      currentTokenKey == "KEYWORD(FLOAT)" ||
+                      currentTokenKey == "KEYWORD(BOOLEAN)");
+    } else if (expectedValue == "KEYWORD(INT)" || expectedValue == "KEYWORD(STRING)" ||
+               expectedValue == "KEYWORD(FLOAT)" || expectedValue == "KEYWORD(BOOLEAN)" ||
+               expectedValue == "KEYWORD(INTEGER)" || expectedValue == "KEYWORD(VARCHAR)") {
+        isTypeMatch = (currentTokenKey == expectedValue);
+    }
+
+    // 检查匹配
+    if (!isTypeMatch && currentTokenKey != expectedValue) {
+        stringstream errMsg;
+        errMsg << "语法错误：预期'" << expectedValue << "', 实际'" << currentTokenKey
+               << "'（Token值: '" << currentToken.value << "', 行: " << currentToken.line
+               << ", 列: " << currentToken.column << "）";
+        throw runtime_error(errMsg.str());
+    }
+
+    // 推进Token流
+    tokenPos++;
+    if (tokenPos < tokens.size()) {
+        currentToken = tokens[tokenPos];
+    } else {
+        currentToken = Token(TokenType::EOF_TOKEN, "", -1, -1);
+    }
+}
+
+ASTNodePtr Parser::parse() {
+    try {
+        if (tokens.empty()) {
+            throw std::runtime_error("输入为空，无法生成 AST");
+        }
+        // 调用语法分析逻辑
+        return parseProg();
+    } catch (const std::exception& e) {
+        std::cerr << "Parser 错误: " << e.what() << std::endl;
+        throw std::runtime_error("Parser error: Failed to generate AST");
+    }
+}
+
+Parser::Parser(const std::vector<Token>& tokenList)
+    : lexer(nullptr),  // lexer设为nullptr，因为不需要词法分析器
+      currentToken(TokenType::ERROR, "", -1, -1),
+      tokenPos(0) {
+
+    initPredictTable();
+    //语法栈初始化：栈底为EOF（结束符），栈顶为开始符号Prog
+    symStack.push("EOF");
+    symStack.push("Prog");
+
+    // 直接使用传入的token序列
+    tokens = tokenList;
+    if (tokens.empty()) {
+        throw runtime_error("Token序列为空，无法进行语法分析");
+    }
+
+    std::cout << "Cached Tokens: " << tokensToString(tokens) << std::endl;
+
+    //初始化当前Token
+    currentToken = tokens[tokenPos];
+}
+
+// 原构造函数：接受Lexer引用（修改为使用指针）
 Parser::Parser(Lexer& l)
-    : lexer(l),
+    : lexer(&l),  // 改为指针赋值
       currentToken(TokenType::ERROR, "", -1, -1),
       tokenPos(0) {
 
@@ -53,7 +164,7 @@ Parser::Parser(Lexer& l)
     symStack.push("EOF");
     symStack.push("Prog");
     //从词法分析器获取所有Token并缓存
-    tokens = lexer.getAllTokens();
+    tokens = lexer->getAllTokens();  // 使用->而不是.
     if (tokens.empty()) {
         throw runtime_error("Lexer returned empty token stream");
     }
@@ -62,7 +173,6 @@ Parser::Parser(Lexer& l)
 
     //初始化当前Token
     currentToken = tokens[tokenPos];
-
 }
 
 //预测表初始化（LL(1)）
@@ -72,6 +182,7 @@ void Parser::initPredictTable() {
     predictTable["Prog|KEYWORD(CREATE)"] = {"Stmt", "EOF"};
     predictTable["Prog|KEYWORD(INSERT)"] = {"Stmt", "EOF"};
     predictTable["Prog|KEYWORD(DELETE)"] = {"Stmt", "EOF"};
+    predictTable["Prog|EOF"] = {}; // 允许空输入
 
     // 2. 语句规则：Stmt → CreateTable | Insert | Select | Delete（分发到具体语句）
     predictTable["Stmt|KEYWORD(CREATE)"] = {"CreateTable"};
@@ -96,7 +207,7 @@ void Parser::initPredictTable() {
     predictTable["ColumnList'|)"] = {};                                 // 右括号结束（空产生式）
 
     // 5. 列定义规则：Column → 列名 类型关键字（扩展支持VARCHAR/INTEGER）
-    predictTable["Column|IDENTIFIER"] = {"IDENTIFIER", "KEYWORD(TYPE)", "DELIMITER(", "CONSTANT", "DELIMITER)"};
+    predictTable["Column|IDENTIFIER"] = {"IDENTIFIER", "KEYWORD(TYPE)"};
     // 扩展类型关键字匹配：支持INT/INTEGER、STRING/VARCHAR（兼容大小写）
     predictTable["KEYWORD(TYPE)|KEYWORD(INT)"] = {"KEYWORD(INT)"};
     predictTable["KEYWORD(TYPE)|KEYWORD(INTEGER)"] = {"KEYWORD(INTEGER)"};
@@ -198,80 +309,80 @@ void Parser::parseNonTerminal(const string& nonTerminal) {
 
 
 // 匹配终结符：检查当前Token是否与预期一致，匹配成功则推进Token流
-void Parser::match(const string& expectedValue) {
-    //1. 生成当前Token的标识（与预期值格式对齐）
-    string currentTokenKey;
-    if (currentToken.type == TokenType::KEYWORD) {
-        string keywordValue = currentToken.value;
-        transform(keywordValue.begin(), keywordValue.end(), keywordValue.begin(), ::toupper);
-        currentTokenKey = "KEYWORD(" + keywordValue + ")";
-    } else if (currentToken.type == TokenType::IDENTIFIER) {
-        currentTokenKey = "IDENTIFIER";
-        //兼容处理1：无引号字符串按CONSTANT匹配（针对INSERT值列表）
-        if (expectedValue == "CONSTANT") {
-            currentTokenKey = "CONSTANT";
-        }
-    } else if (currentToken.type == TokenType::CONSTANT) {
-        currentTokenKey = "CONSTANT";
-    } else if (currentToken.type == TokenType::OPERATOR) {
-        // 特殊处理通配符*，确保它被正确识别为STAR而不是OPERATOR
-        if (currentToken.value == "*") {
-            currentTokenKey = STAR;
-        } else {
-            currentTokenKey = "OPERATOR";
-        }
-    } else if (currentToken.type == TokenType::DELIMITER) {
-        //映射分隔符到统一常量（与预测表符号一致）
-        if (currentToken.value == "(") {
-            currentTokenKey = LPAREN;
-        } else if (currentToken.value == ")") {
-            currentTokenKey = RPAREN;
-        } else if (currentToken.value == ",") {
-            currentTokenKey = COMMA;
-        } else if (currentToken.value == ";") {
-            currentTokenKey = SEMICOLON;
-        } else if (currentToken.value == "*") {
-            currentTokenKey = STAR;
-        } else {
-            currentTokenKey = "DELIMITER(" + currentToken.value + ")";
-        }
-    } else if (currentToken.type == TokenType::EOF_TOKEN) {
-        currentTokenKey = "EOF";
-    } else {
-        throw runtime_error("未知Token类型: " + to_string(static_cast<int>(currentToken.type)));
-    }
-
-    //2. 修改isTypeMatch条件，支持类型关键字的大小写不敏感匹配
-    bool isTypeMatch = false;
-
-    // 检查是否是类型关键字匹配
-    if (expectedValue == "KEYWORD(TYPE)") {
-        isTypeMatch = (currentTokenKey == "KEYWORD(INT)" ||
-                      currentTokenKey == "KEYWORD(INTEGER)" ||
-                      currentTokenKey == "KEYWORD(STRING)" ||
-                      currentTokenKey == "KEYWORD(VARCHAR)" ||
-                      currentTokenKey == "KEYWORD(FLOAT)" ||
-                      currentTokenKey == "KEYWORD(BOOLEAN)");
-    }
-
-    // 额外支持直接的类型关键字匹配（如"KEYWORD(INT)"）
-    else if (expectedValue == "KEYWORD(INT)" || expectedValue == "KEYWORD(STRING)" ||
-             expectedValue == "KEYWORD(FLOAT)" || expectedValue == "KEYWORD(BOOLEAN)" ||
-             expectedValue == "KEYWORD(INTEGER)" || expectedValue == "KEYWORD(VARCHAR)") {
-        isTypeMatch = (currentTokenKey == expectedValue);
-    }
-
-    if (!isTypeMatch && currentTokenKey != expectedValue) {
-        stringstream errMsg;
-        errMsg << "语法错误：预期'" << expectedValue << "', 实际'" << currentTokenKey
-               << "'（行: " << currentToken.line << ", 列: " << currentToken.column << "）";
-        throw runtime_error(errMsg.str());
-    }
-
-    //3. 推进Token流（无论是否匹配成功，异常已提前抛出）
-    tokenPos++;
-    currentToken = (tokenPos < tokens.size()) ? tokens[tokenPos] : Token(TokenType::EOF_TOKEN, "", -1, -1);
-}
+// void Parser::match(const string& expectedValue) {
+//     //1. 生成当前Token的标识（与预期值格式对齐）
+//     string currentTokenKey;
+//     if (currentToken.type == TokenType::KEYWORD) {
+//         string keywordValue = currentToken.value;
+//         transform(keywordValue.begin(), keywordValue.end(), keywordValue.begin(), ::toupper);
+//         currentTokenKey = "KEYWORD(" + keywordValue + ")";
+//     } else if (currentToken.type == TokenType::IDENTIFIER) {
+//         currentTokenKey = "IDENTIFIER";
+//         //兼容处理1：无引号字符串按CONSTANT匹配（针对INSERT值列表）
+//         if (expectedValue == "CONSTANT") {
+//             currentTokenKey = "CONSTANT";
+//         }
+//     } else if (currentToken.type == TokenType::CONSTANT) {
+//         currentTokenKey = "CONSTANT";
+//     } else if (currentToken.type == TokenType::OPERATOR) {
+//         // 特殊处理通配符*，确保它被正确识别为STAR而不是OPERATOR
+//         if (currentToken.value == "*") {
+//             currentTokenKey = STAR;
+//         } else {
+//             currentTokenKey = "OPERATOR";
+//         }
+//     } else if (currentToken.type == TokenType::DELIMITER) {
+//         //映射分隔符到统一常量（与预测表符号一致）
+//         if (currentToken.value == "(") {
+//             currentTokenKey = LPAREN;
+//         } else if (currentToken.value == ")") {
+//             currentTokenKey = RPAREN;
+//         } else if (currentToken.value == ",") {
+//             currentTokenKey = COMMA;
+//         } else if (currentToken.value == ";") {
+//             currentTokenKey = SEMICOLON;
+//         } else if (currentToken.value == "*") {
+//             currentTokenKey = STAR;
+//         } else {
+//             currentTokenKey = "DELIMITER(" + currentToken.value + ")";
+//         }
+//     } else if (currentToken.type == TokenType::EOF_TOKEN) {
+//         currentTokenKey = "EOF";
+//     } else {
+//         throw runtime_error("未知Token类型: " + to_string(static_cast<int>(currentToken.type)));
+//     }
+//
+//     //2. 修改isTypeMatch条件，支持类型关键字的大小写不敏感匹配
+//     bool isTypeMatch = false;
+//
+//     // 检查是否是类型关键字匹配
+//     if (expectedValue == "KEYWORD(TYPE)") {
+//         isTypeMatch = (currentTokenKey == "KEYWORD(INT)" ||
+//                       currentTokenKey == "KEYWORD(INTEGER)" ||
+//                       currentTokenKey == "KEYWORD(STRING)" ||
+//                       currentTokenKey == "KEYWORD(VARCHAR)" ||
+//                       currentTokenKey == "KEYWORD(FLOAT)" ||
+//                       currentTokenKey == "KEYWORD(BOOLEAN)");
+//     }
+//
+//     // 额外支持直接的类型关键字匹配（如"KEYWORD(INT)"）
+//     else if (expectedValue == "KEYWORD(INT)" || expectedValue == "KEYWORD(STRING)" ||
+//              expectedValue == "KEYWORD(FLOAT)" || expectedValue == "KEYWORD(BOOLEAN)" ||
+//              expectedValue == "KEYWORD(INTEGER)" || expectedValue == "KEYWORD(VARCHAR)") {
+//         isTypeMatch = (currentTokenKey == expectedValue);
+//     }
+//
+//     if (!isTypeMatch && currentTokenKey != expectedValue) {
+//         stringstream errMsg;
+//         errMsg << "语法错误：预期'" << expectedValue << "', 实际'" << currentTokenKey
+//                << "'（行: " << currentToken.line << ", 列: " << currentToken.column << "）";
+//         throw runtime_error(errMsg.str());
+//     }
+//
+//     //3. 推进Token流（无论是否匹配成功，异常已提前抛出）
+//     tokenPos++;
+//     currentToken = (tokenPos < tokens.size()) ? tokens[tokenPos] : Token(TokenType::EOF_TOKEN, "", -1, -1);
+// }
 
 //语句解析函数
 /**
@@ -820,20 +931,20 @@ optional<Condition> Parser::parseWhereClause() {
  * 核心解析接口：执行语法分析，生成AST
  * @return AST根节点（成功时为具体语句的AST，失败时为nullptr）
  */
-unique_ptr<ASTNode> Parser::parse() {
-    try {
-        // 验证栈初始化是否正确（栈顶应为开始符号Prog）
-        if (symStack.empty() || symStack.top() != "Prog") {
-            throw runtime_error("语法栈初始化错误：栈顶应为'Prog'");
-        }
-        // 开始解析程序入口
-        unique_ptr<ASTNode> result = parseProg();
-        return result;
-    } catch (const exception& e) {
-        // 捕获解析过程中的异常，打印错误信息和当前状态
-        return nullptr;
-    }
-}
+// unique_ptr<ASTNode> Parser::parse() {
+//     try {
+//         // 验证栈初始化是否正确（栈顶应为开始符号Prog）
+//         if (symStack.empty() || symStack.top() != "Prog") {
+//             throw runtime_error("语法栈初始化错误：栈顶应为'Prog'");
+//         }
+//         // 开始解析程序入口
+//         unique_ptr<ASTNode> result = parseProg();
+//         return result;
+//     } catch (const exception& e) {
+//         // 捕获解析过程中的异常，打印错误信息和当前状态
+//         return nullptr;
+//     }
+// }
 
 /**
  * 解析DELETE语句：生成DeleteAST节点

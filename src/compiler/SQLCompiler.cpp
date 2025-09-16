@@ -5,14 +5,17 @@
 #include "../../include/compiler/SQLCompiler.h"
 
 #include <iostream>
+#include "json.hpp"
 
 #include "../../include/compiler/AST.h"
+
+using json = nlohmann::json;
 
 namespace minidb {
 
     SQLCompiler::SQLCompiler(CatalogManager& catalog) : catalogManager(catalog) {}
 
-    std::unordered_map<std::string, std::string> SQLCompiler::compile(const std::string& sql) {
+    json SQLCompiler::compile(const std::string& sql) {
 
     // 1. 词法分析
     Lexer lexer(sql);
@@ -27,8 +30,8 @@ namespace minidb {
     }
     std::cerr << std::endl;
 
-    // 2. 语法分析
-    Parser parser(lexer);
+    // 2. 语法分析 - 传递已获取的tokens
+    Parser parser(tokens);
     auto ast = parser.parse();
     if (!ast) {
         throw std::runtime_error("Parser error: Failed to generate AST.");
@@ -40,9 +43,9 @@ namespace minidb {
 
     // 4. 执行计划生成
     QueryPlanner planner;
-    auto plan = planner.generatePlan(ast.get());
+    json plan = planner.generatePlan(ast.get());
 
-    // 根据AST类型补充元信息
+    // 根据AST类型补充元信息并执行相应操作
     if (dynamic_cast<CreateTableAST*>(ast.get())) {
         plan["astType"] = "CreateTable";
         // 调用CatalogManager创建表

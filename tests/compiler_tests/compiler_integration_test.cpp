@@ -12,6 +12,7 @@
 #include "compiler/SQLCompiler.h"
 
 using namespace minidb;
+using json = nlohmann::json;
 
 // 将TokenType转换为字符串，用于调试输出
 static std::string tokenTypeToString(TokenType type) {
@@ -40,14 +41,14 @@ TEST_CASE("SQLCompiler Integration Test", "[compiler]") {
     SQLCompiler compiler(catalog);
 
     SECTION("CREATE TABLE") {
-        auto plan = compiler.compile("CREATE TABLE users (id INT, name VARCHAR);");
+        json plan = compiler.compile("CREATE TABLE users (id INT, name VARCHAR);");  // 改为 json 类型
         REQUIRE(plan["astType"] == "CreateTable");
         REQUIRE(catalog.table_exists("users")); // 验证表已创建
     }
 
     SECTION("INSERT") {
         compiler.compile("CREATE TABLE users (id INT, name VARCHAR);"); // 先创建表
-        auto plan = compiler.compile("INSERT INTO users VALUES (1, 'Alice');");
+        json plan = compiler.compile("INSERT INTO users VALUES (1, 'Alice');");  // 改为 json 类型
         REQUIRE(plan["astType"] == "Insert");
     }
 
