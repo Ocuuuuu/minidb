@@ -5,8 +5,6 @@
 #ifndef MINIDB_AST_H
 #define MINIDB_AST_H
 
-#include <memory>
-
 #include "../common/Token.h"
 #include <vector>
 #include <optional>
@@ -16,11 +14,7 @@ using namespace std;
 class ASTNode {
 public:
     virtual ~ASTNode() = default; //虚析构函数，确保子类正确释放
-
 };
-
-// 定义智能指针别名
-using ASTNodePtr = unique_ptr<ASTNode>;
 
 //列信息（用于CREATE TABLE和INSERT语句）
 struct Column {
@@ -34,12 +28,9 @@ struct Condition {
     string op;      //运算符（如 ">"、"="、"<"）
     string value;   //值（如 "20"）
 
-    // 默认构造函数
-    Condition() = default;
-
-    // 可选构造函数，便于使用
-    Condition(string col, string oper, string val)
-        : column(std::move(col)), op(std::move(oper)), value(std::move(val)) {}
+    // // 可选构造函数，便于使用
+    // Condition(string col, string oper, string val)
+    //     : column(std::move(col)), op(std::move(oper)), value(std::move(val)) {}
 
 };
 

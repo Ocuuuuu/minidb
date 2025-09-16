@@ -35,6 +35,7 @@ Page* BufferManager::fetchPage(PageID page_id) {
 
     // 页面未命中，从磁盘加载
     miss_count_++;
+    std::cout<<"未命中"<<miss_count_<< std::endl;
 
     // 缓冲池已满时淘汰页面
     if (page_table_.size() >= pool_size_) {

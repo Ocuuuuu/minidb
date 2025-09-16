@@ -97,9 +97,15 @@ void FileManager::createDatabase(const std::string& db_name) {
         ensureDirectoryExists(db_path_obj.parent_path().string());
     }
 
-    // 检查文件是否已存在
+    // // 检查文件是否已存在
+    // if (std::filesystem::exists(db_path_)) {
+    //     throw IOException("Database file already exists: " + db_path_);
+    // }
+
+    // 检查文件是否已存在并删除
     if (std::filesystem::exists(db_path_)) {
-        throw IOException("Database file already exists: " + db_path_);
+        std::cout << "Database file already exists. Deleting it..." << std::endl;
+        std::filesystem::remove(db_path_);
     }
 
     // 创建文件

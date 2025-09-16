@@ -126,6 +126,7 @@ namespace minidb {
             : DatabaseException("Page Error: " + msg) {}
     };
 
+
     // 槽位号超出范围（页面内的槽位操作）
     class SlotOutOfRangeException : public PageException {
     public:

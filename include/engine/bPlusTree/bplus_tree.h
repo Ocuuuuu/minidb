@@ -12,6 +12,10 @@ namespace engine {
 
 class BPlusTreePage; / 前向声明
 
+// B+树节点常量定义
+constexpr int LEAF_NODE_MAX_KEYS = 32;      // 叶子节点最大键数
+constexpr int INTERNAL_NODE_MAX_KEYS = 32;  // 内部节点最大键数
+
 class BPlusTree {
 public:
     BPlusTree(std::shared_ptr<storage::Pager> pager,
@@ -36,6 +40,14 @@ private:
     std::shared_ptr<storage::Pager> pager_;
     PageID root_page_id_;
     TypeId key_type_;
+    mutable uint32_t node_count_ = 0;
+
+    /**
+     * 根据键类型计算键的大小（字节）
+     * @param type 键的数据类型
+     * @return 键的大小（字节数），VARCHAR 返回 0 表示变长
+     */
+    uint16_t calculate_key_size(TypeId type) const;
 
     // 辅助方法
     Value get_min_value_for_type(TypeId type) const;

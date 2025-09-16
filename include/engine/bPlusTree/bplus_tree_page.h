@@ -17,6 +17,7 @@ struct BPlusNodeHeader {
     PageID next_page_id;     // 下一个叶子节点的页ID
     TypeId key_type;         // 键的数据类型
     uint16_t key_size;       // 键的固定大小（VARCHAR为0）
+
 };
 #pragma pack(pop)
 
