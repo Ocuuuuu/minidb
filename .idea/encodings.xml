@@ -8,6 +8,7 @@
     <file url="file://$PROJECT_DIR$/src/compiler/SemanticAnalyzer.cpp" charset="GBK" />
     <file url="file://$PROJECT_DIR$/src/main.cpp" charset="GBK" />
     <file url="file://$PROJECT_DIR$/tests/CMakeLists.txt" charset="GBK" />
+    <file url="file://$PROJECT_DIR$/tests/compiler_tests/compiler_integration_test.cpp" charset="GBK" />
     <file url="file://$PROJECT_DIR$/tests/compiler_tests/lexer_test.cpp" charset="GBK" />
   </component>
 </project>

@@ -3,7 +3,7 @@
 
 #include <string>
 #include<stdexcept>
-#include "../include/common/Types.h" // 包含TypeId枚举定义
+#include "../include/common/Types.h"
 
 namespace minidb{
 

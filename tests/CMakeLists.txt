@@ -21,6 +21,7 @@ if(TEST_SOURCES)
             integration_tests/test_catalog.cpp
             compiler_tests/query_planner_test.cpp
             compiler_tests/query_planner_test.cpp
+            compiler_tests/compiler_integration_test.cpp
     )
 
     # Á´½ÓÖ÷¿â

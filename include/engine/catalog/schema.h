@@ -23,6 +23,13 @@ namespace minidb {
          */
         explicit Schema(const std::vector<MyColumn>& columns);
 
+
+        void addColumn(const MyColumn& column) {
+            columns_.push_back(column);
+            length_ += column.length; // 更新记录长度
+        }
+
+
         // 核心查询接口
         const std::vector<MyColumn>& get_columns() const { return columns_; } ///< 获取所有列
         const MyColumn& get_column(uint32_t column_index) const; ///< 根据索引获取特定列
@@ -67,6 +74,14 @@ namespace minidb {
     private:
         std::vector<MyColumn> columns_; ///< 所有列的集合
         uint32_t length_{0};         ///< 一条完整记录的总长度（所有列长度之和）
+
+        void calculateLength() {
+            length_ = 0;
+            for (const auto& col : columns_) {
+                length_ += col.length;
+            }
+        }
+
     };
 
 } // namespace minidb

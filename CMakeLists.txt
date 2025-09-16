@@ -14,8 +14,12 @@ include_directories(include)
 # 创建主可执行文件
 add_executable(minidb ${SOURCES}
         src/main.cpp
+        include/common/QueryResult.h
+        include/common/Condition.h
         include/compiler/QueryPlanner.h
-        include/compiler/PlanNode.h)
+        include/compiler/PlanNode.h
+        include/compiler/SQLCompiler.h
+        src/compiler/SQLCompiler.cpp)
 
 # 创建库目标用于测试
 add_library(minidb_lib ${SOURCES})
