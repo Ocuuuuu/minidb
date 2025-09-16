@@ -34,9 +34,9 @@ private:
     //初始化预测分析表（核心！定义LL(1)文法的产生式）
     void initPredictTable();
 
-    //调试辅助函数
-    void debugString(const string& s, const string& label);
-    void debugState();
+    // //调试辅助函数
+    // void debugString(const string& s, const string& label);
+    // void debugState();
 
     //解析非终结符：根据预测表压入对应产生式
     void parseNonTerminal(const string& nonTerminal);

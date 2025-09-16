@@ -51,9 +51,10 @@ Token Lexer::handleIdentifierOrKeyword() {
 
     // 截取从起始位置到当前位置的字符串
     std::string word = sql.substr(startPos, pos - startPos);
+    std::string upperWord = word;
+    std::transform(upperWord.begin(), upperWord.end(), upperWord.begin(), ::toupper);
 
-    // 判断是否为关键字（在关键字集合中则为关键字，否则为标识符）
-    if (keywords.find(word) != keywords.end()) {
+    if (keywords.find(upperWord) != keywords.end()) {
         return Token(TokenType::KEYWORD, word, line, startColumn);
     } else {
         return Token(TokenType::IDENTIFIER, word, line, startColumn);
@@ -62,58 +63,44 @@ Token Lexer::handleIdentifierOrKeyword() {
 
 // 处理常数（扩展支持：整数、浮点数、单双引号字符串）
 Token Lexer::handleConstant() {
+
     int startColumn = column;
     size_t startPos = pos;
 
-    // 1. 处理字符串常量（支持单/双引号和转义）
-    if (sql[pos] == '"' || sql[pos] == '\'') {
+    // 处理字符串常量（单引号或双引号）
+    if (sql[pos] == '\"' || sql[pos] == '\'') {
         char quoteChar = sql[pos];
-        pos++;
+        pos++; // 跳过开头的引号
         column++;
 
+        std::string str; // 不包含引号的字符串内容
         while (pos < sql.size()) {
             if (sql[pos] == '\\' && pos + 1 < sql.size()) {
+                // 处理转义字符（如 \" 或 \'）
+                str += sql[pos + 1]; // 直接添加转义后的字符（忽略反斜杠）
                 pos += 2;
                 column += 2;
             } else if (sql[pos] != quoteChar) {
+                str += sql[pos]; // 添加普通字符
                 pos++;
                 column++;
             } else {
-                break;
+                break; // 遇到闭合引号
             }
         }
 
         if (pos < sql.size() && sql[pos] == quoteChar) {
-            pos++;
+            pos++; // 跳过结尾的引号
             column++;
-            std::string str = sql.substr(startPos + 1, pos - startPos - 2);
-
-            // 处理转义序列
-            size_t escPos = 0;
-            while (escPos < str.size()) {
-                if (str[escPos] == '\\' && escPos + 1 < str.size()) {
-                    char nextChar = str[escPos + 1];
-                    if (nextChar == '"' || nextChar == '\'' || nextChar == '\\') {
-                        str.replace(escPos, 2, 1, nextChar);
-                        escPos += 1;
-                    } else {
-                        escPos += 1;
-                    }
-                } else {
-                    escPos += 1;
-                }
-            }
-
-            return Token(TokenType::CONSTANT, str, line, startColumn);
+            return Token(TokenType::CONSTANT, str, line, startColumn); // 返回不包含引号的字符串
         } else {
-            return Token(TokenType::ERROR, "Unclosed string (missing " + std::string(1, quoteChar) + ")", line, startColumn);
+            return Token(TokenType::ERROR, "Unclosed string", line, startColumn);
         }
     }
 
-    // 2. 处理数值常量（强制完整读取）
+    // 处理数值常量（整数或浮点数）
     else if (isdigit(static_cast<unsigned char>(sql[pos])) || sql[pos] == '.') {
         size_t numStart = pos;
-        // 读取所有连续的数字和小数点（不提前终止）
         while (pos < sql.size()) {
             char c = sql[pos];
             if (isdigit(static_cast<unsigned char>(c)) || c == '.') {
@@ -124,13 +111,10 @@ Token Lexer::handleConstant() {
             }
         }
 
-        // 截取完整序列
         std::string numStr = sql.substr(numStart, pos - numStart);
         int dotCount = std::count(numStr.begin(), numStr.end(), '.');
-        bool hasDigit = std::any_of(numStr.begin(), numStr.end(),
-                                  [](unsigned char c) { return std::isdigit(c); });
+        bool hasDigit = std::any_of(numStr.begin(), numStr.end(), [](unsigned char c) { return std::isdigit(c); });
 
-        // 合法性判断
         if (dotCount > 1 || !hasDigit) {
             return Token(TokenType::ERROR, "Invalid number format (" + numStr + ")", line, startColumn);
         }
@@ -138,7 +122,7 @@ Token Lexer::handleConstant() {
         return Token(TokenType::CONSTANT, numStr, line, startColumn);
     }
 
-    // 3. 未知常量类型
+    // 未知常量类型
     return Token(TokenType::ERROR, "Unknown constant type", line, startColumn);
 }
 
@@ -241,3 +225,5 @@ vector<Token> Lexer::getAllTokens() {
     tokens.push_back(current_token);
     return tokens;
 }
+
+

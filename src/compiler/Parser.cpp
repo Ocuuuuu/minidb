@@ -17,23 +17,52 @@
 
 using namespace std;
 
+// 将TokenType转换为字符串，用于调试输出
+static std::string tokenTypeToString(TokenType type) {
+    switch (type) {
+    case TokenType::KEYWORD: return "KEYWORD";
+    case TokenType::IDENTIFIER: return "IDENTIFIER";
+    case TokenType::CONSTANT: return "CONSTANT";
+    case TokenType::OPERATOR: return "OPERATOR";
+    case TokenType::DELIMITER: return "DELIMITER";
+    case TokenType::ERROR: return "ERROR";
+    case TokenType::EOF_TOKEN: return "EOF";
+    default: return "UNKNOWN";
+    }
+}
+
+// 将Token列表转换为字符串表示，用于调试和测试
+static std::string tokensToString(const std::vector<Token>& tokens) {
+    if (tokens.empty()) return "Empty token vector";
+
+    std::string result;
+    for (const auto& token : tokens) {
+        result += "[" + tokenTypeToString(token.type) + ":" + token.value + "]";
+    }
+    return result;
+}
+
 //构造函数
 Parser::Parser(Lexer& l)
     : lexer(l),
       currentToken(TokenType::ERROR, "", -1, -1),
       tokenPos(0) {
+
     initPredictTable();
     //语法栈初始化：栈底为EOF（结束符），栈顶为开始符号Prog
     symStack.push("EOF");
     symStack.push("Prog");
     //从词法分析器获取所有Token并缓存
     tokens = lexer.getAllTokens();
-    //初始化当前Token（若Token流非空）
-    if (!tokens.empty()) {
-        currentToken = tokens[tokenPos];
-    } else {
-        currentToken = Token(TokenType::EOF_TOKEN, "", -1, -1);
+    if (tokens.empty()) {
+        throw runtime_error("Lexer returned empty token stream");
     }
+
+    std::cout << "Cached Tokens: " << tokensToString(tokens) << std::endl;
+
+    //初始化当前Token
+    currentToken = tokens[tokenPos];
+
 }
 
 //预测表初始化（LL(1)）
@@ -67,7 +96,7 @@ void Parser::initPredictTable() {
     predictTable["ColumnList'|)"] = {};                                 // 右括号结束（空产生式）
 
     // 5. 列定义规则：Column → 列名 类型关键字（扩展支持VARCHAR/INTEGER）
-    predictTable["Column|IDENTIFIER"] = {"IDENTIFIER", "KEYWORD(TYPE)"};
+    predictTable["Column|IDENTIFIER"] = {"IDENTIFIER", "KEYWORD(TYPE)", "DELIMITER(", "CONSTANT", "DELIMITER)"};
     // 扩展类型关键字匹配：支持INT/INTEGER、STRING/VARCHAR（兼容大小写）
     predictTable["KEYWORD(TYPE)|KEYWORD(INT)"] = {"KEYWORD(INT)"};
     predictTable["KEYWORD(TYPE)|KEYWORD(INTEGER)"] = {"KEYWORD(INTEGER)"};

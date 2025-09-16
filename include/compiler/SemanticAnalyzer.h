@@ -30,8 +30,8 @@ public:
      * 构造函数
      * @param catalog_manager 目录管理器引用，用于查询表和列信息
      */
-    explicit SemanticAnalyzer(CatalogManager& catalog_manager) 
-        : catalog_manager_(catalog_manager) {}
+    explicit SemanticAnalyzer(CatalogManager& catalogManager)
+           : catalog_manager_(catalogManager) {}
 
     /**
      * 语义分析入口函数
@@ -40,8 +40,6 @@ public:
      * @throws SemanticError 语义分析失败时抛出
      */
     void analyze(ASTNode* ast);
-
-
 
 private:
     CatalogManager& catalog_manager_;  // 目录管理器引用
