@@ -70,8 +70,8 @@ public:
     PageType getPageType() const { return header_.page_type; }
     void setPageType(PageType type) { header_.page_type = type; }
 
-    // 获取下一条记录
-    bool getNextRecord(RID& rid);
+    // 获取下一条记录（按槽位顺序）
+    bool getNextRecord(RID& rid) const;
 
 private:
     // 7. 私有辅助函数（与 cpp 中槽位操作逻辑匹配，仅内部调用）

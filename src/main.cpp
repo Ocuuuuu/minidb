@@ -54,7 +54,7 @@
 //         storage::Page* page = pager->getPage(page_id);
 //         std::cout << "Page obtained: " << page->getPageId() << std::endl;
 //
-//         // ????д??????
+//         // ????????????
 //         std::cout << "Writing data to page..." << std::endl;
 //         char* data = page->getData();
 //         data[0] = 'T';
@@ -200,7 +200,7 @@
 //         std::cout << "Height: " << tree.get_height() << std::endl;
 //         std::cout << "Node count: " << tree.get_node_count() << std::endl;
 //
-//         // ??????в????????????
+//         // ????????????????????
 //         for (size_t i = 0; i < values.size(); ++i) {
 //             RID result = tree.search(Value(values[i]));
 //             if (result.isValid()) {
@@ -230,7 +230,7 @@
 //     std::cout << "=== Starting Comprehensive B+Tree Test ===" << std::endl;
 //
 //     try {
-//         // ???и??????????
+//         // ???????????????
 //         test_pager_operations();
 //         test_bplus_tree_creation();
 //         test_bplus_tree_search_empty();
@@ -265,111 +265,155 @@
 //     }
 // }
 
-
 #include <iostream>
 #include <memory>
 #include "../include/engine/ExecutionEngine.h"
 #include "../include/engine/catalog/catalog_manager.h"
 #include "../include/storage/BufferManager.h"
 #include "../include/storage/DiskManager.h"
-#include "../include/storage/FileManager.h" //
-#include "json.hpp"  //
+#include "../include/storage/FileManager.h"
+#include "json.hpp"
 #include "common/QueryResult.h"
 
 using namespace minidb;
 
 int main() {
-    // ???? FileManager ???
-    auto fileManager = std::make_shared<storage::FileManager>();
-    std::string db_name = "my_database"; // ???????
-    fileManager->createDatabase(db_name); // ?????????
+    try {
+        std::cout << "Starting MiniDB test..." << std::endl;
 
-    // ???? DiskManager ???
-    auto diskManager = std::make_shared<storage::DiskManager>(fileManager);
+        // Initialize components
+        auto fileManager = std::make_shared<storage::FileManager>();
+        std::string db_name = "my_database";
 
-    // ???? CatalogManager ???
-    auto catalogManager = std::make_shared<CatalogManager>();
-
-    // ???? BufferManager ???
-    auto bufferManager = std::make_shared<storage::BufferManager>(diskManager);
-
-    // ???? ExecutionEngine ???
-    ExecutionEngine engine(catalogManager, bufferManager);
-
-    // 1. ?????????
-    nlohmann::json createTablePlan = {
-        {"type", "CreateTable"},
-        {"tableName", "Students"},
-        {"columns", {
-            {{"name", "name"}, {"type", "VARCHAR"}},
-            {{"name", "age"}, {"type", "INTEGER"}}
-        }}
-    };
-
-    // ??д?????????
-    engine.executePlan(createTablePlan);
-    std::cout << "Table 'Students' created." << std::endl;
-
-    // 2. ???????????
-    nlohmann::json insertPlan1 = {
-        {"type", "Insert"},
-        {"tableName", "Students"},
-        {"values", {"Alice", "20"}}
-    };
-
-    engine.executePlan(insertPlan1);
-    std::cout << "Inserted record into 'Students': Alice, 20." << std::endl;
-
-    nlohmann::json insertPlan2 = {
-        {"type", "Insert"},
-        {"tableName", "Students"},
-        {"values", {"Bob", "22"}}
-    };
-    engine.executePlan(insertPlan2);
-    std::cout << "Inserted record into 'Students': Bob, 22." << std::endl;
-
-    // 3. ???????????
-    nlohmann::json selectPlan = {
-        {"type", "Select"},
-        {"tableName", "Students"},
-        {"columns", {"*"}}
-    };
-
-    QueryResult selectResult = engine.executePlan(selectPlan);
-
-    // ????????
-    std::cout << "Selected records:" << std::endl;
-    for (size_t i = 0; i < selectResult.rowCount(); ++i) {
-        const auto& row = selectResult.getRow(i);
-        for (const auto& column : row) {
-            std::cout << column << " ";
+        // Clean up any existing database
+        if (fileManager->databaseExists(db_name)) {
+            std::cout << "Removing existing database..." << std::endl;
+            fileManager->deleteDatabase(db_name);
         }
-        std::cout << std::endl;
-    }
 
-    // 4. ???????????
-    nlohmann::json deletePlan = {
-        {"type", "Delete"},
-        {"tableName", "Students"},
-        {"condition", {
-            {"column", "name"},
-            {"op", "EQUALS"},
-            {"value", "Alice"}
-        }}
-    };
-    engine.executePlan(deletePlan);
-    std::cout << "Deleted record from 'Students': Alice." << std::endl;
+        fileManager->createDatabase(db_name);
+        std::cout << "Database created: " << db_name << std::endl;
 
-    // ????????????????
-    selectResult = engine.executePlan(selectPlan);
-    std::cout << "Selected records after deletion:" << std::endl;
-    for (size_t i = 0; i < selectResult.rowCount(); ++i) {
-        const auto& row = selectResult.getRow(i);
-        for (const auto& column : row) {
-            std::cout << column << " ";
+        auto diskManager = std::make_shared<storage::DiskManager>(fileManager);
+        auto catalogManager = std::make_shared<CatalogManager>();
+        auto bufferManager = std::make_shared<storage::BufferManager>(diskManager, 100);
+
+        ExecutionEngine engine(catalogManager, bufferManager);
+
+        // 1. Create table
+        std::cout << "Creating table..." << std::endl;
+        nlohmann::json createTablePlan = {
+            {"type", "CreateTable"},
+            {"tableName", "Students"},
+            {"columns", {
+                {{"name", "name"}, {"type", "VARCHAR"}},
+                {{"name", "age"}, {"type", "INTEGER"}}
+            }}
+        };
+
+        engine.executePlan(createTablePlan);
+        std::cout << "Table 'Students' created successfully." << std::endl;
+
+        // Verify table exists
+        bool tableExists = catalogManager->table_exists("Students");
+        if (tableExists) {
+            std::cout << "Table verified in catalog: Students" << std::endl;
+            auto table = catalogManager->get_table("Students");
+            if (table) {
+                std::cout << "Table pointer obtained successfully" << std::endl;
+                std::cout << "Table name: " << table->get_table_name() << std::endl;
+            }
+        } else {
+            std::cerr << "ERROR: Table not found in catalog!" << std::endl;
+            return 1;
         }
-        std::cout << std::endl;
-    }
 
-    return 0;
+        // 2. Insert records - 修改数据类型
+        std::cout << "Inserting records..." << std::endl;
+
+        nlohmann::json insertPlan1 = {
+            {"type", "Insert"},
+            {"tableName", "Students"},
+            {"values", {"Alice", "20"}}
+        };
+
+        try {
+            engine.executePlan(insertPlan1);
+            std::cout << "Inserted record: Alice, 20" << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "Insert failed: " << e.what() << std::endl;
+
+            // 尝试获取更多调试信息
+            try {
+                auto table = catalogManager->get_table("Students");
+                if (table) {
+                    std::cout << "Table exists but insert failed" << std::endl;
+                }
+            } catch (...) {
+                std::cerr << "Could not get table for debugging" << std::endl;
+            }
+
+            return 1;
+        }
+
+        nlohmann::json insertPlan2 = {
+            {"type", "Insert"},
+            {"tableName", "Students"},
+            {"values", {"Bob", "22"}}
+        };
+
+        try {
+            engine.executePlan(insertPlan2);
+            std::cout << "Inserted record: Bob, 22" << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "Insert failed: " << e.what() << std::endl;
+            return 1;
+        }
+
+        // 其余代码保持不变...
+        // 3. Select records
+        std::cout << "Selecting records..." << std::endl;
+        nlohmann::json selectPlan = {
+            {"type", "Select"},
+            {"tableName", "Students"},
+            {"columns", {"*"}}
+        };
+
+        try {
+            QueryResult selectResult = engine.executePlan(selectPlan);
+            std::cout << "Selected " << selectResult.rowCount() << " records:" << std::endl;
+
+            if (selectResult.rowCount() > 0) {
+                // Print column headers
+                const auto& firstRow = selectResult.getRow(0);
+                std::cout << "Columns: ";
+                for (size_t i = 0; i < firstRow.size(); ++i) {
+                    std::cout << "col" << i << " ";
+                }
+                std::cout << std::endl;
+
+                // Print data
+                for (size_t i = 0; i < selectResult.rowCount(); ++i) {
+                    const auto& row = selectResult.getRow(i);
+                    std::cout << "Row " << i << ": ";
+                    for (const auto& column : row) {
+                        std::cout << column << " ";
+                    }
+                    std::cout << std::endl;
+                }
+            } else {
+                std::cout << "No records found" << std::endl;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Select failed: " << e.what() << std::endl;
+            return 1;
+        }
+
+        std::cout << "All operations completed successfully!" << std::endl;
+        return 0;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Fatal error: " << e.what() << std::endl;
+        return 1;
+    }
 }

@@ -349,47 +349,115 @@ QueryResult ExecutionEngine::executeCreateTable(const nlohmann::json& plan) {
     return QueryResult(); // 返回成功或空的结果集
 }
 
-// 执行插入操作
 QueryResult ExecutionEngine::executeInsert(const nlohmann::json& plan) {
-    std::string tableName = plan["tableName"];
-    std::vector<std::string> values = plan["values"];
+    try {
+        std::cout << "=== executeInsert START ===" << std::endl;
 
-    const TableInfo* table_info = catalog_->get_table(tableName);
-    if (!table_info) {
-        handleError("Table does not exist: " + tableName);
-    }
+        std::string tableName = plan["tableName"];
+        std::vector<std::string> values = plan["values"];
 
-    PageID first_page_id = table_info->getFirstPageID();
-    storage::Page* page = bufferManager_->fetchPage(first_page_id);
+        std::cout << "Inserting into table: " << tableName << std::endl;
+        std::cout << "Values count: " << values.size() << std::endl;
 
-    char record_data[PAGE_SIZE];
-    std::memset(record_data, 0, sizeof(record_data));
-
-    const Schema& schema = table_info->get_schema();
-    for (size_t i = 0; i < values.size(); ++i) {
-        const MyColumn& column = schema.get_column(static_cast<uint32_t>(i));
-        if (column.type == TypeId::INTEGER) {
-            int32_t value = std::stoi(values[i]);
-            std::memcpy(record_data + column.offset, &value, sizeof(int32_t));
-        } else if (column.type == TypeId::BOOLEAN) {
-            bool value = (values[i] == "true");
-            std::memcpy(record_data + column.offset, &value, sizeof(bool));
-        } else if (column.type == TypeId::VARCHAR) {
-            std::string value = values[i];
-            std::memcpy(record_data + column.offset, value.c_str(), value.size());
-            // 可能还需要处理长度
+        const TableInfo* table_info = catalog_->get_table(tableName);
+        if (!table_info) {
+            throw std::runtime_error("Table does not exist: " + tableName);
         }
-    }
 
-    RID rid;
-    if (!page->insertRecord(record_data, sizeof(record_data), &rid)) {
-        handleError("Failed to insert record.");
-    }
+        PageID first_page_id = table_info->getFirstPageID();
+        std::cout << "First page ID: " << first_page_id << std::endl;
 
-    page->setDirty(true);
-    return QueryResult(); // 返回成功或空的结果集
+        storage::Page* page = bufferManager_->fetchPage(first_page_id);
+        if (!page) {
+            throw std::runtime_error("Failed to fetch page: " + std::to_string(first_page_id));
+        }
+
+        // 获取 schema 来计算记录大小
+        const Schema& schema = table_info->get_schema();
+        size_t record_size = 0;
+
+        // 计算总记录大小
+        for (uint32_t i = 0; i < schema.get_column_count(); ++i) {
+            const MyColumn& column = schema.get_column(i);
+            if (column.type == TypeId::INTEGER) {
+                record_size += sizeof(int32_t);
+            } else if (column.type == TypeId::BOOLEAN) {
+                record_size += sizeof(bool);
+            } else if (column.type == TypeId::VARCHAR) {
+                record_size += column.length; // 使用固定长度
+            }
+        }
+
+        std::cout << "Calculated record size: " << record_size << " bytes" << std::endl;
+
+        // 使用动态分配的缓冲区
+        std::vector<char> record_data(record_size, 0);
+
+        // 或者如果你更喜欢固定数组，计算实际使用的大小
+        // char record_buffer[PAGE_SIZE];
+        // std::memset(record_buffer, 0, record_size); // 只清零需要的部分
+
+        size_t current_offset = 0;
+
+        for (size_t i = 0; i < values.size(); ++i) {
+            const MyColumn& column = schema.get_column(static_cast<uint32_t>(i));
+            std::cout << "Processing column " << i << ": " << column.name
+                     << ", type: " << static_cast<int>(column.type)
+                     << ", offset: " << current_offset << std::endl;
+
+            if (column.type == TypeId::INTEGER) {
+                try {
+                    int32_t value = std::stoi(values[i]);
+                    std::memcpy(record_data.data() + current_offset, &value, sizeof(int32_t));
+                    current_offset += sizeof(int32_t);
+                } catch (const std::exception& e) {
+                    throw std::runtime_error("Failed to convert to integer: '" + values[i] + "'");
+                }
+            } else if (column.type == TypeId::BOOLEAN) {
+                bool value = (values[i] == "true" || values[i] == "1");
+                std::memcpy(record_data.data() + current_offset, &value, sizeof(bool));
+                current_offset += sizeof(bool);
+            } else if (column.type == TypeId::VARCHAR) {
+                std::string value = values[i];
+                size_t copy_size = std::min(value.size(), static_cast<size_t>(column.length));
+                std::memcpy(record_data.data() + current_offset, value.c_str(), copy_size);
+
+                // 如果字符串较短，用null终止符填充剩余空间
+                if (copy_size < static_cast<size_t>(column.length)) {
+                    std::memset(record_data.data() + current_offset + copy_size, 0,
+                               column.length - copy_size);
+                }
+                current_offset += column.length;
+            }
+        }
+
+        // 添加调试信息
+        std::cout << "=== PAGE DEBUG INFO ===" << std::endl;
+        std::cout << "Page ID: " << page->getPageId() << std::endl;
+        std::cout << "Page free space: " << page->getFreeSpace() << std::endl;
+        std::cout << "Record size to insert: " << record_size << std::endl;
+
+        RID rid;
+        std::cout << "Attempting to insert record..." << std::endl;
+
+        // 关键修复：使用实际记录大小而不是 PAGE_SIZE
+        if (!page->insertRecord(record_data.data(), record_size, &rid)) {
+            std::cout << "Insert failed. Page free space: " << page->getFreeSpace()
+                     << ", needed: " << record_size << std::endl;
+            throw std::runtime_error("Failed to insert record into page");
+        }
+
+        std::cout << "Record inserted successfully, RID: " << rid.page_id << ", " << rid.slot_num << std::endl;
+
+        page->setDirty(true);
+        std::cout << "=== executeInsert SUCCESS ===" << std::endl;
+        return QueryResult();
+
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR in executeInsert: " << e.what() << std::endl;
+        throw;
+    }
 }
-
 // 执行选择操作
 QueryResult ExecutionEngine::executeSelect(const nlohmann::json& plan) {
     std::string tableName = plan["tableName"];
