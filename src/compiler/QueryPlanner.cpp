@@ -70,6 +70,8 @@ json QueryPlanner::handleInsert(InsertAST* ast) {
     seqScan["type"] = "SeqScan";
     seqScan["tableName"] = ast->tableName;
 
+
+
     // 2. 如果有 WHERE 条件，生成 Filter 节点
     if (ast->condition) {
         json filter;

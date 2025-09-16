@@ -1,9 +1,9 @@
 #ifndef MINIDB_PAGER_H
 #define MINIDB_PAGER_H
 
-#include "storage/BufferManager.h"
-#include "storage/DiskManager.h"
-#include "storage/Page.h"
+#include "../include/storage/BufferManager.h"
+#include "../include/storage/DiskManager.h"
+#include "../include/storage/Page.h"
 #include <memory>
 #include <set>
 #include <mutex>
