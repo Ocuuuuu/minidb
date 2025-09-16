@@ -418,180 +418,187 @@
 //     }
 // }
 
-#include <iostream>
-#include <fstream>
-#include <memory>
-#include "storage/FileManager.h"
-#include "storage/DiskManager.h"
-#include "storage/BufferManager.h"
-#include "engine/catalog/catalog_manager.h"
-#include "engine/ExecutionEngine.h"
-#include "common/QueryResult.h"
-#include "json.hpp"
 
-using namespace minidb;
-using namespace minidb::storage;
-using json = nlohmann::json;
 
-// ====== 阶段 1：初始化数据库 ======
-void initPhase() {
-    std::cout << "=== INIT MODE ===" << std::endl;
 
-    // 如果存在旧数据库文件，删除
-    if (std::filesystem::exists("testdb")) {
-        std::cout << "Database file already exists. Deleting it..." << std::endl;
-        std::filesystem::remove("testdb");
-    }
 
-    // 创建一个新数据库
-    auto fileManager = std::make_shared<FileManager>();
-    fileManager->createDatabase("testdb");
 
-    auto diskManager = std::make_shared<DiskManager>(fileManager);
-    auto bufferManager = std::make_shared<BufferManager>(diskManager, 10);
-    auto catalog = std::make_shared<CatalogManager>();
-    ExecutionEngine exec(catalog, bufferManager);
 
-    // 创建表 users
-    json createPlan = {
-        {"type", "CreateTable"},
-        {"tableName", "users"},
-        {"columns", {
-            {{"name", "id"},   {"type", "INTEGER"}},
-            {{"name", "name"}, {"type", "VARCHAR"}},
-            {{"name", "age"},  {"type", "INTEGER"}}
-        }}
-    };
-    exec.executePlan(createPlan);
-    std::cout << "[OK] Table created.\n";
-
-    // 插入 Alice
-    json insert1 = {
-        {"type", "Insert"},
-        {"tableName", "users"},
-        {"values", {"1", "Alice", "30"}}
-    };
-    exec.executePlan(insert1);
-
-    // 插入 Bob
-    json insert2 = {
-        {"type", "Insert"},
-        {"tableName", "users"},
-        {"values", {"2", "Bob", "25"}}
-    };
-    exec.executePlan(insert2);
-    std::cout << "[OK] 2 rows inserted.\n";
-
-    // SELECT 检查
-    json selectPlan = {
-        {"type", "Select"},
-        {"tableName", "users"},
-        {"columns", {"id", "name", "age"}}
-    };
-    QueryResult result = exec.executePlan(selectPlan);
-    result.print();
-
-    // === 保存 meta 文件 ===
-    TableInfo *tinfo = catalog->get_table("users");
-    if (!tinfo) throw std::runtime_error("Failed to get table info after create_table");
-
-    json meta;
-    meta["tableName"] = "users";
-    meta["columns"] = json::array();
-    meta["columns"].push_back({{"name", "id"},   {"type", "INTEGER"}});
-    meta["columns"].push_back({{"name", "name"}, {"type", "VARCHAR"}});
-    meta["columns"].push_back({{"name", "age"},  {"type", "INTEGER"}});
-    meta["firstPageID"] = tinfo->getFirstPageID();
-
-    std::ofstream out("catalog.meta");
-    out << meta.dump(4);
-    out.close();
-
-    std::cout << "=== 模拟重启数据库 ===" << std::endl;
-}
-
-// ====== 阶段 2：重启后读取 ======
-void readPhase() {
-    std::cout << "=== READ MODE ===" << std::endl;
-
-    // 打开数据库
-    auto fileManager = std::make_shared<FileManager>();
-    fileManager->openDatabase("testdb");
-
-    auto diskManager = std::make_shared<DiskManager>(fileManager);
-    auto bufferManager = std::make_shared<BufferManager>(diskManager, 10);
-    auto catalog = std::make_shared<CatalogManager>();
-    ExecutionEngine exec(catalog, bufferManager);
-
-    // === 从 meta 文件恢复 Catalog ===
-    std::ifstream in("catalog.meta");
-    if (!in.is_open()) throw std::runtime_error("Failed to open catalog.meta");
-    json meta;
-    in >> meta;
-    in.close();
-
-    Schema schema;
-    for (auto &col : meta["columns"]) {
-        std::string name = col["name"];
-        std::string type = col["type"];
-
-        if (type == "INTEGER") {
-            schema.addColumn(MyColumn(name, TypeId::INTEGER, 4, schema.get_length()));
-        } else if (type == "VARCHAR") {
-            schema.addColumn(MyColumn(name, TypeId::VARCHAR, 255, schema.get_length()));
-        }
-    }
-    catalog->create_table(meta["tableName"], schema);
-    catalog->get_table(meta["tableName"])->setFirstPageID(meta["firstPageID"]);
-
-    // === SELECT After Restart ===
-    json selectPlan = {
-        {"type", "Select"},
-        {"tableName", "users"},
-        {"columns", {"id", "name", "age"}}
-    };
-    QueryResult result = exec.executePlan(selectPlan);
-    std::cout << "--- SELECT After Restart ---" << std::endl;
-    result.print();
-
-    // UPDATE Bob's age
-    json updatePlan = {
-        {"type", "Update"},
-        {"tableName", "users"},
-        {"updates", {
-            {{"column", "age"}, {"value", "26"}}
-        }}
-    };
-    exec.executePlan(updatePlan);
-    std::cout << "[OK] Updated Bob's age.\n";
-
-    // DELETE Alice
-    json deletePlan = {
-        {"type", "Delete"},
-        {"tableName", "users"},
-        {"condition", {
-            {"column", "name"},
-            {"value", "Alice"},
-            {"op", "EQUALS"}
-        }}
-    };
-    exec.executePlan(deletePlan);
-    std::cout << "[OK] Deleted Alice.\n";
-
-    // Final SELECT
-    result = exec.executePlan(selectPlan);
-    std::cout << "--- SELECT Final ---" << std::endl;
-    result.print();
-}
-
-// ====== 主入口 ======
-int main() {
-    try {
-        initPhase();
-        readPhase();
-    } catch (const std::exception &e) {
-        std::cerr << "[ERROR] " << e.what() << std::endl;
-        return 1;
-    }
-    return 0;
-}
+//====================================执行引擎的
+// #include <iostream>
+// #include <fstream>
+// #include <memory>
+// #include "storage/FileManager.h"
+// #include "storage/DiskManager.h"
+// #include "storage/BufferManager.h"
+// #include "engine/catalog/catalog_manager.h"
+// #include "engine/ExecutionEngine.h"
+// #include "common/QueryResult.h"
+// #include "json.hpp"
+//
+// using namespace minidb;
+// using namespace minidb::storage;
+// using json = nlohmann::json;
+//
+// // ====== 阶段 1：初始化数据库 ======
+// void initPhase() {
+//     std::cout << "=== INIT MODE ===" << std::endl;
+//
+//     // 如果存在旧数据库文件，删除
+//     if (std::filesystem::exists("testdb")) {
+//         std::cout << "Database file already exists. Deleting it..." << std::endl;
+//         std::filesystem::remove("testdb");
+//     }
+//
+//     // 创建一个新数据库
+//     auto fileManager = std::make_shared<FileManager>();
+//     fileManager->createDatabase("testdb");
+//
+//     auto diskManager = std::make_shared<DiskManager>(fileManager);
+//     auto bufferManager = std::make_shared<BufferManager>(diskManager, 10);
+//     auto catalog = std::make_shared<CatalogManager>();
+//     ExecutionEngine exec(catalog, bufferManager);
+//
+//     // 创建表 users
+//     json createPlan = {
+//         {"type", "CreateTable"},
+//         {"tableName", "users"},
+//         {"columns", {
+//             {{"name", "id"},   {"type", "INTEGER"}},
+//             {{"name", "name"}, {"type", "VARCHAR"}},
+//             {{"name", "age"},  {"type", "INTEGER"}}
+//         }}
+//     };
+//     exec.executePlan(createPlan);
+//     std::cout << "[OK] Table created.\n";
+//
+//     // 插入 Alice
+//     json insert1 = {
+//         {"type", "Insert"},
+//         {"tableName", "users"},
+//         {"values", {"1", "Alice", "30"}}
+//     };
+//     exec.executePlan(insert1);
+//
+//     // 插入 Bob
+//     json insert2 = {
+//         {"type", "Insert"},
+//         {"tableName", "users"},
+//         {"values", {"2", "Bob", "25"}}
+//     };
+//     exec.executePlan(insert2);
+//     std::cout << "[OK] 2 rows inserted.\n";
+//
+//     // SELECT 检查
+//     json selectPlan = {
+//         {"type", "Select"},
+//         {"tableName", "users"},
+//         {"columns", {"id", "name", "age"}}
+//     };
+//     QueryResult result = exec.executePlan(selectPlan);
+//     result.print();
+//
+//     // === 保存 meta 文件 ===
+//     TableInfo *tinfo = catalog->get_table("users");
+//     if (!tinfo) throw std::runtime_error("Failed to get table info after create_table");
+//
+//     json meta;
+//     meta["tableName"] = "users";
+//     meta["columns"] = json::array();
+//     meta["columns"].push_back({{"name", "id"},   {"type", "INTEGER"}});
+//     meta["columns"].push_back({{"name", "name"}, {"type", "VARCHAR"}});
+//     meta["columns"].push_back({{"name", "age"},  {"type", "INTEGER"}});
+//     meta["firstPageID"] = tinfo->getFirstPageID();
+//
+//     std::ofstream out("catalog.meta");
+//     out << meta.dump(4);
+//     out.close();
+//
+//     std::cout << "=== 模拟重启数据库 ===" << std::endl;
+// }
+//
+// // ====== 阶段 2：重启后读取 ======
+// void readPhase() {
+//     std::cout << "=== READ MODE ===" << std::endl;
+//
+//     // 打开数据库
+//     auto fileManager = std::make_shared<FileManager>();
+//     fileManager->openDatabase("testdb");
+//
+//     auto diskManager = std::make_shared<DiskManager>(fileManager);
+//     auto bufferManager = std::make_shared<BufferManager>(diskManager, 10);
+//     auto catalog = std::make_shared<CatalogManager>();
+//     ExecutionEngine exec(catalog, bufferManager);
+//
+//     // === 从 meta 文件恢复 Catalog ===
+//     std::ifstream in("catalog.meta");
+//     if (!in.is_open()) throw std::runtime_error("Failed to open catalog.meta");
+//     json meta;
+//     in >> meta;
+//     in.close();
+//
+//     Schema schema;
+//     for (auto &col : meta["columns"]) {
+//         std::string name = col["name"];
+//         std::string type = col["type"];
+//
+//         if (type == "INTEGER") {
+//             schema.addColumn(MyColumn(name, TypeId::INTEGER, 4, schema.get_length()));
+//         } else if (type == "VARCHAR") {
+//             schema.addColumn(MyColumn(name, TypeId::VARCHAR, 255, schema.get_length()));
+//         }
+//     }
+//     catalog->create_table(meta["tableName"], schema);
+//     catalog->get_table(meta["tableName"])->setFirstPageID(meta["firstPageID"]);
+//
+//     // === SELECT After Restart ===
+//     json selectPlan = {
+//         {"type", "Select"},
+//         {"tableName", "users"},
+//         {"columns", {"id", "name", "age"}}
+//     };
+//     QueryResult result = exec.executePlan(selectPlan);
+//     std::cout << "--- SELECT After Restart ---" << std::endl;
+//     result.print();
+//
+//     // UPDATE Bob's age
+//     json updatePlan = {
+//         {"type", "Update"},
+//         {"tableName", "users"},
+//         {"updates", {
+//             {{"column", "age"}, {"value", "26"}}
+//         }}
+//     };
+//     exec.executePlan(updatePlan);
+//     std::cout << "[OK] Updated Bob's age.\n";
+//
+//     // DELETE Alice
+//     json deletePlan = {
+//         {"type", "Delete"},
+//         {"tableName", "users"},
+//         {"condition", {
+//             {"column", "name"},
+//             {"value", "Alice"},
+//             {"op", "EQUALS"}
+//         }}
+//     };
+//     exec.executePlan(deletePlan);
+//     std::cout << "[OK] Deleted Alice.\n";
+//
+//     // Final SELECT
+//     result = exec.executePlan(selectPlan);
+//     std::cout << "--- SELECT Final ---" << std::endl;
+//     result.print();
+// }
+//
+// // ====== 主入口 ======
+// int main() {
+//     try {
+//         initPhase();
+//         readPhase();
+//     } catch (const std::exception &e) {
+//         std::cerr << "[ERROR] " << e.what() << std::endl;
+//         return 1;
+//     }
+//     return 0;
+// }
