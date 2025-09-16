@@ -46,6 +46,7 @@ DiskManager::~DiskManager() {
 
 
     void DiskManager::writePage(PageID page_id, const char* data, bool require_lock) {
+    // 这个函数应该直接写入传入的data，不要做任何额外的序列化操作
     if (page_id >= page_count_) {
         throw DiskException("Page ID out of range: " + std::to_string(page_id));
     }
@@ -56,9 +57,14 @@ DiskManager::~DiskManager() {
     }
 
     auto& file = file_manager_->getFileStream();
-    std::streampos offset = page_id * PAGE_SIZE;
-    file.seekp(offset);
+    std::streampos offset = static_cast<std::streampos>(page_id * PAGE_SIZE);
 
+    file.seekp(offset);
+    if (!file.good()) {
+        throw DiskException("Failed to seek to page: " + std::to_string(page_id));
+    }
+
+    // ✅ 直接写入传入的数据，不要做任何处理
     if (!file.write(data, PAGE_SIZE)) {
         throw DiskException("Failed to write page: " + std::to_string(page_id));
     }
@@ -66,7 +72,8 @@ DiskManager::~DiskManager() {
     file.flush();
 }
 
-    PageID DiskManager::allocatePage() {
+    // ====================== Method 1: Allocate Page ======================
+ PageID DiskManager::allocatePage() {
     std::cout << "allocatePage() called" << std::endl;
 
     std::lock_guard<std::mutex> lock(io_mutex_);
@@ -162,6 +169,8 @@ DiskManager::~DiskManager() {
 
     return allocated_page;
 }
+
+
     void DiskManager::deallocatePage(PageID page_id) {
     if (page_id >= page_count_ || page_id == 0) {
         throw DiskException("Invalid page ID for deallocation: " + std::to_string(page_id));
