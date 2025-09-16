@@ -34,6 +34,18 @@ DiskManager::~DiskManager() {
     std::streampos offset = page_id * PAGE_SIZE;
     file.seekg(offset);
 
+
+    // 检查文件流状态
+    if (!file.good()) {
+        std::cout << "File stream not good before read, state: "
+                  << " good=" << file.good()
+                  << " eof=" << file.eof()
+                  << " fail=" << file.fail()
+                  << " bad=" << file.bad() << std::endl;
+        throw DiskException("File stream is not in a good state before reading the page.");
+    }
+
+
     if (!file.read(data, PAGE_SIZE)) {
         throw DiskException("Failed to read page: " + std::to_string(page_id));
     }
@@ -214,6 +226,11 @@ PageID DiskManager::getPageCount() const {
         page_count_ = 1;
         free_list_head_ = INVALID_PAGE_ID;
         writeHeader();
+
+        // 用空数据初始化第一页以确保页存在
+        char empty_data[PAGE_SIZE] = {0};
+        writePage(0, empty_data, false);  // 不获取锁
+
         std::cout << "Header initialized successfully" << std::endl;
         return;
     }

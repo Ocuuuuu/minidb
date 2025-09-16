@@ -39,6 +39,11 @@ void Page::deserialize(const char* src) {
     memcpy(&header_, src, sizeof(PageHeader));
     // 从二进制缓冲区读取数据区
     memcpy(data_, src + sizeof(PageHeader), sizeof(data_));
+
+        // // 添加额外的数据验证
+        // if (header_.free_space_offset < 0 || header_.free_space_offset > sizeof(data_)) {
+        //     throw PageException("Invalid page header data.");
+        // }
 }
 
 // ====================== 记录操作辅助：空间检查 ======================
@@ -191,6 +196,21 @@ bool Page::getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) cons
     *size = getSlotSize(slot_num);
     return *size != 0; // 长度为0表示记录已被删除
 }
+
+    // ====================== 获取下一条记录 ======================
+bool Page::getNextRecord(RID& rid) {
+        if (!rid.isValid() || rid.slot_num >= header_.slot_count) {
+            return false;
+        }
+
+        // 检查下一个槽位
+        if (rid.slot_num + 1 < header_.slot_count) {
+            rid.slot_num++; // 移动到下一个槽位
+            return true; // 找到了下一条记录
+        }
+
+        return false; // 没有更多记录
+    }
 
 // ====================== 页面压缩（简化版，暂未实现完整逻辑） ======================
 void Page::compactify() {
