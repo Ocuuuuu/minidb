@@ -10,7 +10,7 @@
 namespace minidb {
 namespace engine {
 
-class BPlusTreePage; / 前向声明
+class BPlusTreePage; // 前向声明
 
 // B+树节点常量定义
 constexpr int LEAF_NODE_MAX_KEYS = 32;      // 叶子节点最大键数
