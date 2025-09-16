@@ -17,14 +17,12 @@
 
 namespace minidb {
 
-    /**
-     * 执行计划生成器：将 AST 转换为逻辑执行计划（JSON 格式）
-     */
+
+    //执行计划生成器：将 AST 转换为逻辑执行计划（JSON 格式）
     class QueryPlanner {
     public:
-        /**
-         * 构造函数
-         */
+
+        //构造函数
         QueryPlanner() = default;
 
         /**
@@ -35,24 +33,18 @@ namespace minidb {
         nlohmann::json generatePlan(ASTNode* ast);
 
     private:
-        /**
-         * 处理 CREATE TABLE 语句
-         */
+
+        //处理 CREATE TABLE 语句
         nlohmann::json handleCreateTable(CreateTableAST* ast);
 
-        /**
-         * 处理 INSERT 语句
-         */
+        //处理 INSERT 语句
         nlohmann::json handleInsert(InsertAST* ast);
 
-        /**
-         * 处理 SELECT 语句
-         */
+
+        //处理 SELECT 语句
         nlohmann::json handleSelect(SelectAST* ast);
 
-        /**
-         * 处理 DELETE 语句
-         */
+        //处理 DELETE 语句
         nlohmann::json handleDelete(DeleteAST* ast);
     };
 

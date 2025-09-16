@@ -7,20 +7,12 @@
 
 namespace minidb {
 
-    /**
-     * @brief 表信息类
-     *
-     * 封装了一张表的完整元信息，包括表名和表结构模式。
-     * 这是目录管理中的基本存储单元。
-     */
+    //表信息类
+    //封装了一张表的完整元信息，包括表名和表结构模式
     class TableInfo {
     public:
-        /**
-         * @brief 构造函数
-         * @param table_name 表名
-         * @param schema 表的结构模式
-         * @param table_id 表ID，如果为0则自动生成
-         */
+
+        //构造函数
         TableInfo(const std::string& table_name, const Schema& schema, PageID first_page_id, uint32_t table_id = 0);
 
         // 查询接口
@@ -30,31 +22,28 @@ namespace minidb {
 
         PageID getFirstPageID() const { return first_page_id_; } ///< 获取第一页ID
 
-        /**
-         * @brief 设置表ID（谨慎使用，主要用于反序列化）
-         */
+
+        //设置表ID
         void set_table_id(uint32_t table_id) { table_id_ = table_id; }
 
-        /**
-         * @brief 重载相等运算符
-         */
+
+        //重载相等运算符
         bool operator==(const TableInfo& other) const {
             return table_id_ == other.table_id_ &&
                    table_name_ == other.table_name_;
         }
 
-        /**
-         * @brief 重载不相等运算符
-         */
+
+        //重载不相等运算符
         bool operator!=(const TableInfo& other) const {
             return !(*this == other);
         }
 
     private:
-        std::string table_name_; ///< 表的名称
-        Schema schema_;         ///< 表的结构定义
-        uint32_t table_id_;     ///< 表的唯一标识符
-        PageID first_page_id_;  ///< 表的第一页ID
+        std::string table_name_; // 表的名称
+        Schema schema_;         // 表的结构定义
+        uint32_t table_id_;     // 表的唯一标识符
+        PageID first_page_id_;  // 表的第一页ID
     };
 
 } // namespace minidb

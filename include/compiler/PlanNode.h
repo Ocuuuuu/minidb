@@ -11,9 +11,8 @@
 
 namespace minidb {
 
-    /**
-     * 逻辑执行计划节点基类
-     */
+
+    //逻辑执行计划节点基类
     struct PlanNode {
         virtual ~PlanNode() = default;
         virtual nlohmann::json toJson() const = 0;

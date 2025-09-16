@@ -10,7 +10,7 @@
 namespace minidb {
 namespace engine {
 
-class BPlusTreePage; // 前向声明
+class BPlusTreePage; / 前向声明
 
 class BPlusTree {
 public:

@@ -7,10 +7,8 @@
 using namespace minidb;
 using namespace std;
 
-/**
- * 将字符串类型名转换为TypeId枚举
- * 支持多种类型别名和大小写形式
- */
+
+//将字符串类型名转换为TypeId枚举，支持多种类型别名和大小写形式
 static TypeId stringToTypeId(const string& type_str) {
     // 转换为小写以实现大小写不敏感匹配
     string lower_type;
@@ -29,10 +27,8 @@ static TypeId stringToTypeId(const string& type_str) {
     }
 }
 
-/**
- * 语义分析入口函数
- * 根据AST节点类型分发到相应的分析函数
- */
+
+//语义分析入口函数，根据AST节点类型分发到相应的分析函数
 void SemanticAnalyzer::analyze(ASTNode* ast) {
     if (!ast) {
         throw SemanticError("AST节点为空，无法进行语义分析");
@@ -55,10 +51,7 @@ void SemanticAnalyzer::analyze(ASTNode* ast) {
 // 声明运算符重载（未使用，可根据需要实现）
 bool operator==(TypeId lhs, char* str);
 
-/**
- * 分析CREATE TABLE语句
- * 检查：表是否已存在、列名是否重复、列类型是否合法
- */
+//分析CREATE TABLE语句，表是否已存在、列名是否重复、列类型是否合法
 void SemanticAnalyzer::analyzeCreateTable(CreateTableAST* ast) {
     const string& table_name = ast->tableName;
 
@@ -110,10 +103,7 @@ void SemanticAnalyzer::analyzeCreateTable(CreateTableAST* ast) {
     }
 }
 
-/**
- * 分析INSERT语句
- * 检查：表是否存在、插入值数量与列数量是否匹配、值类型与列类型是否匹配
- */
+//分析INSERT语句
 void SemanticAnalyzer::analyzeInsert(InsertAST* ast) {
     const string& table_name = ast->tableName;
     const vector<string>& values = ast->values;
@@ -169,10 +159,7 @@ void SemanticAnalyzer::analyzeInsert(InsertAST* ast) {
     }
 }
 
-/**
- * 分析SELECT语句
- * 检查：表是否存在、查询列是否存在、条件表达式是否合法
- */
+//分析SELECT语句
 void SemanticAnalyzer::analyzeSelect(SelectAST* ast) {
     const string& table_name = ast->tableName;
     const vector<string>& columns = ast->columns;
@@ -208,10 +195,7 @@ void SemanticAnalyzer::analyzeSelect(SelectAST* ast) {
     }
 }
 
-/**
- * 分析DELETE语句
- * 检查：表是否存在、WHERE条件是否合法
- */
+//分析DELETE语句
 void SemanticAnalyzer::analyzeDelete(DeleteAST* ast) {
     const string& table_name = ast->tableName;
 
@@ -237,10 +221,7 @@ void SemanticAnalyzer::analyzeDelete(DeleteAST* ast) {
     }
 }
 
-/**
- * 分析WHERE条件表达式
- * 检查：条件列是否存在、条件值类型是否与列类型匹配、运算符是否合法
- */
+//分析WHERE条件表达式
 void SemanticAnalyzer::analyzeCondition(const Condition& cond, const Schema& schema, const string& table_name) {
     try {
         // 检查条件列是否存在
@@ -290,11 +271,8 @@ void SemanticAnalyzer::analyzeCondition(const Condition& cond, const Schema& sch
     }
 }
 
-/**
- * 检查运算符是否合法
- * @param op 运算符
- * @return 合法返回true，否则返回false
- */
+
+//检查运算符是否合法
 bool SemanticAnalyzer::isValidOperator(const string& op) {
     static const unordered_set<string> valid_operators = {
         "=", "!=", "<>", "<", "<=", ">", ">=", "LIKE", "NOT LIKE"
@@ -302,12 +280,7 @@ bool SemanticAnalyzer::isValidOperator(const string& op) {
     return valid_operators.count(op) > 0;
 }
 
-/**
- * 检查运算符与数据类型的兼容性
- * @param op 运算符
- * @param type 数据类型
- * @return 兼容返回true，否则返回false
- */
+//检查运算符与数据类型的兼容性
 bool SemanticAnalyzer::isOperatorCompatibleWithType(const string& op, TypeId type) {
     // 所有类型都支持等于和不等于比较
     if (op == "=" || op == "!=" || op == "<>") {
@@ -327,12 +300,7 @@ bool SemanticAnalyzer::isOperatorCompatibleWithType(const string& op, TypeId typ
     return false;
 }
 
-/**
- * 检查值与类型是否匹配
- * @param value 要检查的值
- * @param type 目标类型（"INT"、"STRING"、"FLOAT"、"BOOLEAN"）
- * @return 匹配返回true，否则返回false
- */
+//检查值与类型是否匹配
 bool SemanticAnalyzer::checkValueMatchType(const string& value, const string& type) {
     if (type == "INT") {
         // 检查是否为合法整数
