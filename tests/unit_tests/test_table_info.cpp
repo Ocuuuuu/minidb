@@ -14,28 +14,32 @@ TEST_CASE("TableInfo class functionality", "[tableinfo][catalog][unit]")
     };
 
     minidb::Schema schema(columns);
+    // 设定一个示例的 first_page_id
+    minidb::PageID example_page_id = 1;
 
     SECTION("TableInfo construction and basic properties") {
-        minidb::TableInfo table("users", schema);
+        minidb::TableInfo table("users", schema, example_page_id);
 
         REQUIRE(table.get_table_name() == "users");
         REQUIRE(table.get_table_id() > 0); // ID应该大于0
         REQUIRE(table.get_schema().get_column_count() == 3);
+        REQUIRE(table.getFirstPageID() == example_page_id); // 验证第一页ID
     }
 
     SECTION("TableInfo with specified table ID") {
-        minidb::TableInfo table("products", schema, 12345);
+        minidb::TableInfo table("products", schema, example_page_id, 12345);
 
         REQUIRE(table.get_table_name() == "products");
         REQUIRE(table.get_table_id() == 12345);
         REQUIRE(table.get_schema().get_column_count() == 3);
+        REQUIRE(table.getFirstPageID() == example_page_id); // 验证第一页ID
     }
 
     SECTION("TableInfo equality comparison") {
-        minidb::TableInfo table1("users", schema, 100);
-        minidb::TableInfo table2("users", schema, 100);
-        minidb::TableInfo table3("products", schema, 100);
-        minidb::TableInfo table4("users", schema, 200);
+        minidb::TableInfo table1("users", schema, example_page_id, 100);
+        minidb::TableInfo table2("users", schema, example_page_id, 100);
+        minidb::TableInfo table3("products", schema, example_page_id, 100);
+        minidb::TableInfo table4("users", schema, example_page_id, 200);
 
         REQUIRE(table1 == table2);
         REQUIRE_FALSE(table1 == table3);
@@ -43,15 +47,15 @@ TEST_CASE("TableInfo class functionality", "[tableinfo][catalog][unit]")
     }
 
     SECTION("TableInfo inequality comparison") {
-        minidb::TableInfo table1("users", schema, 100);
-        minidb::TableInfo table2("products", schema, 200);
+        minidb::TableInfo table1("users", schema, example_page_id, 100);
+        minidb::TableInfo table2("products", schema, example_page_id, 200);
 
         REQUIRE(table1 != table2);
         REQUIRE_FALSE(table1 != table1);
     }
 
     SECTION("TableInfo set_table_id method") {
-        minidb::TableInfo table("temp_table", schema);
+        minidb::TableInfo table("temp_table", schema, example_page_id);
         uint32_t original_id = table.get_table_id();
 
         table.set_table_id(9999);
@@ -69,11 +73,12 @@ TEST_CASE("TableInfo unique ID generation", "[tableinfo][id][unit]")
         minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     minidb::Schema schema(columns);
+    minidb::PageID example_page_id = 1;
 
     SECTION("Unique table IDs for different tables") {
-        minidb::TableInfo table1("table1", schema);
-        minidb::TableInfo table2("table2", schema);
-        minidb::TableInfo table3("table3", schema);
+        minidb::TableInfo table1("table1", schema, example_page_id);
+        minidb::TableInfo table2("table2", schema, example_page_id);
+        minidb::TableInfo table3("table3", schema, example_page_id);
 
         REQUIRE(table1.get_table_id() != table2.get_table_id());
         REQUIRE(table1.get_table_id() != table3.get_table_id());
@@ -81,8 +86,8 @@ TEST_CASE("TableInfo unique ID generation", "[tableinfo][id][unit]")
     }
 
     SECTION("Different IDs for same table name") {
-        minidb::TableInfo table1("same_name", schema);
-        minidb::TableInfo table2("same_name", schema);
+        minidb::TableInfo table1("same_name", schema, example_page_id);
+        minidb::TableInfo table2("same_name", schema, example_page_id);
 
         REQUIRE(table1.get_table_name() == table2.get_table_name());
         REQUIRE(table1.get_table_id() != table2.get_table_id());
@@ -95,24 +100,27 @@ TEST_CASE("TableInfo edge cases", "[tableinfo][edge][unit]")
         minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     minidb::Schema schema(columns);
+    minidb::PageID example_page_id = 1;
 
     SECTION("Empty table name") {
-        minidb::TableInfo table("", schema);
+        minidb::TableInfo table("", schema, example_page_id);
 
         REQUIRE(table.get_table_name().empty());
         REQUIRE(table.get_table_id() > 0);
+        REQUIRE(table.getFirstPageID() == example_page_id);
     }
 
     SECTION("Table with empty schema") {
         std::vector<minidb::MyColumn> empty_columns;
         minidb::Schema empty_schema(empty_columns);
 
-        minidb::TableInfo table("empty_table", empty_schema);
+        minidb::TableInfo table("empty_table", empty_schema, example_page_id);
 
         REQUIRE(table.get_table_name() == "empty_table");
         REQUIRE(table.get_table_id() > 0);
         REQUIRE(table.get_schema().get_column_count() == 0);
         REQUIRE(table.get_schema().get_length() == 0);
+        REQUIRE(table.getFirstPageID() == example_page_id);
     }
 
     SECTION("Table with single column schema") {
@@ -121,16 +129,19 @@ TEST_CASE("TableInfo edge cases", "[tableinfo][edge][unit]")
         };
         minidb::Schema single_schema(single_column);
 
-        minidb::TableInfo table("single_col_table", single_schema);
+        minidb::TableInfo table("single_col_table", single_schema, example_page_id);
 
         REQUIRE(table.get_table_name() == "single_col_table");
         REQUIRE(table.get_schema().get_column_count() == 1);
         REQUIRE(table.get_schema().get_length() == 4);
+        REQUIRE(table.getFirstPageID() == example_page_id);
     }
 }
 
 TEST_CASE("TableInfo schema integrity", "[tableinfo][schema][unit]")
 {
+    minidb::PageID example_page_id = 1;
+
     SECTION("Schema content preservation") {
         std::vector<minidb::MyColumn> columns = {
             minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0},
@@ -139,7 +150,7 @@ TEST_CASE("TableInfo schema integrity", "[tableinfo][schema][unit]")
         };
         minidb::Schema original_schema(columns);
 
-        minidb::TableInfo table("test_table", original_schema);
+        minidb::TableInfo table("test_table", original_schema, example_page_id);
         const minidb::Schema& retrieved_schema = table.get_schema();
 
         // 验证schema内容完整保留
@@ -167,7 +178,7 @@ TEST_CASE("TableInfo schema integrity", "[tableinfo][schema][unit]")
         };
         minidb::Schema schema(columns);
 
-        minidb::TableInfo table("offset_test", schema);
+        minidb::TableInfo table("offset_test", schema, example_page_id);
         const minidb::Schema& table_schema = table.get_schema();
 
         // 验证偏移量计算正确
@@ -183,11 +194,12 @@ TEST_CASE("TableInfo ID generation consistency", "[tableinfo][id][consistency][u
         minidb::MyColumn{"id", minidb::TypeId::INTEGER, 4, 0}
     };
     minidb::Schema schema(columns);
+    minidb::PageID example_page_id = 1;
 
     SECTION("Sequential ID generation") {
-        minidb::TableInfo table1("table1", schema);
-        minidb::TableInfo table2("table2", schema);
-        minidb::TableInfo table3("table3", schema);
+        minidb::TableInfo table1("table1", schema, example_page_id);
+        minidb::TableInfo table2("table2", schema, example_page_id);
+        minidb::TableInfo table3("table3", schema, example_page_id);
 
         // ID应该是连续递增的（由于使用原子计数器）
         REQUIRE(table2.get_table_id() > table1.get_table_id());
@@ -195,9 +207,9 @@ TEST_CASE("TableInfo ID generation consistency", "[tableinfo][id][consistency][u
     }
 
     SECTION("Mixed automatic and manual ID assignment") {
-        minidb::TableInfo auto_table("auto_table", schema);
-        minidb::TableInfo manual_table("manual_table", schema, 9999);
-        minidb::TableInfo another_auto_table("another_auto", schema);
+        minidb::TableInfo auto_table("auto_table", schema, example_page_id);
+        minidb::TableInfo manual_table("manual_table", schema, example_page_id, 9999);
+        minidb::TableInfo another_auto_table("another_auto", schema, example_page_id);
 
         REQUIRE(manual_table.get_table_id() == 9999);
         REQUIRE(auto_table.get_table_id() != 9999);

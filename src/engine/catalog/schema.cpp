@@ -39,6 +39,8 @@ namespace minidb {
      * @return const Column& 对应列的常量引用
      * @throw std::out_of_range 如果索引超出有效范围
      */
+
+
     const MyColumn& Schema::get_column(uint32_t column_index) const {
         // 检查索引是否在有效范围内
         if (column_index >= columns_.size()) {
@@ -60,16 +62,16 @@ namespace minidb {
      * @return const Column& 对应列的常量引用
      * @throw std::out_of_range 如果索引超出有效范围
      */
-    const MyColumn& Schema::get_column(int column_index) const {
-        // 检查索引是否在有效范围内
-        if (column_index < 0 || static_cast<uint32_t>(column_index) >= columns_.size()) {
-            // 索引越界，抛出异常
-            throw std::out_of_range("Column index out of range");
-        }
-
-        // 返回对应列的常量引用
-        return columns_[static_cast<uint32_t>(column_index)];
-    }
+    // const MyColumn& Schema::get_column(int column_index) const {
+    //     // 检查索引是否在有效范围内
+    //     if (column_index < 0 || static_cast<uint32_t>(column_index) >= columns_.size()) {
+    //         // 索引越界，抛出异常
+    //         throw std::out_of_range("Column index out of range");
+    //     }
+    //
+    //     // 返回对应列的常量引用
+    //     return columns_[static_cast<uint32_t>(column_index)];
+    // }
 
     /**
      * @brief 根据列名获取列索引

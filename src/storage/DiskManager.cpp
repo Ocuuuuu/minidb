@@ -20,36 +20,30 @@ DiskManager::~DiskManager() {
     writeHeader();
 }
 
+
     void DiskManager::readPage(PageID page_id, char* data, bool require_lock) {
     if (page_id >= page_count_) {
         throw DiskException("Page ID out of range: " + std::to_string(page_id));
     }
 
     std::unique_lock<std::mutex> lock(io_mutex_, std::defer_lock);
-    if (require_lock) {
-        lock.lock();
-    }
+    if (require_lock) lock.lock();
 
     auto& file = file_manager_->getFileStream();
     std::streampos offset = page_id * PAGE_SIZE;
     file.seekg(offset);
 
-
-    // 检查文件流状态
     if (!file.good()) {
-        std::cout << "File stream not good before read, state: "
-                  << " good=" << file.good()
-                  << " eof=" << file.eof()
-                  << " fail=" << file.fail()
-                  << " bad=" << file.bad() << std::endl;
-        throw DiskException("File stream is not in a good state before reading the page.");
+        throw DiskException("File stream bad before read");
     }
 
-
-    if (!file.read(data, PAGE_SIZE)) {
-        throw DiskException("Failed to read page: " + std::to_string(page_id));
+    file.read(data, PAGE_SIZE);
+    std::streamsize bytes_read = file.gcount();
+    if (bytes_read < PAGE_SIZE) {
+        memset(data + bytes_read, 0, PAGE_SIZE - bytes_read); // ✅ 补零，防止反序列化垃圾
     }
 }
+
 
     void DiskManager::writePage(PageID page_id, const char* data, bool require_lock) {
     if (page_id >= page_count_) {

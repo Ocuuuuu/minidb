@@ -50,6 +50,15 @@ namespace minidb {
         // 友元函数：输出操作符
         friend std::ostream& operator<<(std::ostream& os, const Value& value);
 
+        // 新增运算符
+        bool operator>=(const Value& other) const {
+            return !lessThan(other);
+        }
+
+        bool operator<=(const Value& other) const {
+            return !greaterThan(other);
+        }
+
     private:
         TypeId type_id_{TypeId::INVALID};
         std::variant<bool, int32_t, std::string> value_;

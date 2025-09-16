@@ -62,28 +62,26 @@ Page* BufferManager::fetchPage(PageID page_id) {
 
     bool is_new_page = false;
 
-    // 判断是否为新分配页面：slot_count=0 且 free_space 接近最大值 且 free_space_offset 合理
+    // 新页面的典型特征：
+    // 1. slot_count 为 0
+    // 2. page_id 无效
+    // 3. free_space_offset 和 free_space 不是合理的使用中值
+    //    （可能是0，或者等于刚初始化时的值）
     if (header.slot_count == 0 &&
-        (header.free_space_offset == 0 || header.free_space_offset == PAGE_SIZE) &&
-        (header.free_space == 0 ||
-         header.free_space == PAGE_SIZE - sizeof(PageHeader))) {
-
-        // 进一步验证：如果 page_id 不匹配，可能是全新页面
-        if (header.page_id == INVALID_PAGE_ID || header.page_id == 0) {
-            is_new_page = true;
+        (header.page_id == INVALID_PAGE_ID || header.page_id == 0) &&
+        (header.free_space_offset == 0 || header.free_space_offset == PAGE_SIZE - sizeof(PageHeader)) &&
+        (header.free_space == 0 || header.free_space == PAGE_SIZE - sizeof(PageHeader))) {
+        is_new_page = true;
         }
-    }
 
     if (is_new_page) {
         std::cout << "DEBUG: Initializing new page " << page_id << std::endl;
-
-        // ✅ 正确初始化：记录从高地址向下生长
         header.page_id = page_id;
         header.page_type = PageType::DATA_PAGE;
         header.slot_count = 0;
-        header.free_space_offset = PAGE_SIZE;  // ✅ 从高地址开始写入
+        header.free_space_offset = PAGE_SIZE - sizeof(PageHeader); // ✅ 正确初始化
         header.free_space = PAGE_SIZE - sizeof(PageHeader);
-        header.is_dirty = true;                // header 被修改
+        header.is_dirty = true;
         header.next_free_page = INVALID_PAGE_ID;
 
         std::cout << "DEBUG: Page initialized - free_space: " << header.free_space

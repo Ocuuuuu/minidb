@@ -23,8 +23,8 @@ namespace minidb {
         // 核心查询接口
         const std::vector<MyColumn>& get_columns() const { return columns_; } ///< 获取所有列
         const MyColumn& get_column(uint32_t column_index) const; ///< 根据索引获取特定列
-        const MyColumn& get_column(int column_index) const; ///< 根据索引获取特定列(int版本)
-        uint32_t get_column_count() const { return columns_.size(); } ///< 获取列数量
+        // const MyColumn& get_column(int column_index) const; ///< 根据索引获取特定列(int版本)
+         uint32_t get_column_count() const { return columns_.size(); } ///< 获取列数量
         uint32_t get_length() const { return length_; } ///< 获取一条记录的总长度（字节）
 
         // 工具方法

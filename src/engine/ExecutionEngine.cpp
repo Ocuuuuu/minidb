@@ -1,585 +1,376 @@
-// #include "../../include/engine/ExecutionEngine.h"
-// #include <cstring>
-// #include "../../include/engine/catalog/schema.h"
-// #include "../../include/engine/catalog/catalog_manager.h"
-// #include "../../include/compiler/AST.h"
-// #include "storage/Page.h"
-// #include "storage/BufferManager.h"
-// #include <stdexcept>
-//
-// #include "common/Condition.h"
-// #include "common/Value.h"
-//
-// namespace minidb {
-//
-// ExecutionEngine::ExecutionEngine(std::shared_ptr<CatalogManager> catalog,
-//                                  std::shared_ptr<storage::BufferManager> bufferManager)
-//     : catalog_(std::move(catalog)), bufferManager_(std::move(bufferManager)) {
-// }
-//
-// // 执行CREATE TABLE操作
-// bool ExecutionEngine::executeCreateTable(const CreateTableAST& create_ast) {
-//     return catalog_->create_table_from_ast(create_ast);
-// }
-//
-// // 执行INSERT操作
-// bool ExecutionEngine::executeInsert(const InsertAST& insert_ast) {
-//     const TableInfo* table_info = catalog_->get_table(insert_ast.tableName);
-//     if (!table_info) {
-//         throw std::runtime_error("Table does not exist: " + insert_ast.tableName);
-//     }
-//
-//     char record_data[PAGE_SIZE]; // 记录的数据，根据实际schema定义
-//     auto& schema = table_info->get_schema();
-//
-//     // 初始化记录数据，将其清空
-//     std::memset(record_data, 0, sizeof(record_data));
-//
-//     for (size_t i = 0; i < insert_ast.values.size(); ++i) {
-//         if (i >= schema.get_column_count()) {  // 更改这个条件，固定无误
-//             throw std::runtime_error("Value count does not match column count.");
-//         }
-//
-//         const MyColumn& column = schema.get_column(static_cast<uint32_t>(i)); // 显式转换为uint32_t
-//         Value value;
-//
-//         // 根据列类型转换插入的字符串值
-//         if (column.type == TypeId::INTEGER) {
-//             value = Value(std::stoi(insert_ast.values[i]));
-//         } else if (column.type == TypeId::BOOLEAN) {
-//             value = Value(insert_ast.values[i] == "true");
-//         } else if (column.type == TypeId::VARCHAR) {
-//             value = Value(insert_ast.values[i]);
-//         } else {
-//             throw std::runtime_error("Unsupported column type for INSERT.");
-//         }
-//
-//         // 将生成的Value数据转换为记录格式并填入record_data中
-//         switch (column.type) {
-//             case TypeId::INTEGER: {
-//                 int32_t int_value = value.getAsInt();
-//                 std::memcpy(record_data + column.offset, &int_value, sizeof(int32_t));
-//                 break;
-//             }
-//             case TypeId::BOOLEAN: {
-//                 bool bool_value = value.getAsBool();
-//                 std::memcpy(record_data + column.offset, &bool_value, sizeof(bool));
-//                 break;
-//             }
-//             case TypeId::VARCHAR: {
-//                 std::string str_value = value.getAsString();
-//                 size_t str_length = str_value.length();
-//                 std::memcpy(record_data + column.offset, &str_length, sizeof(size_t)); // 假设将长度存储在前面
-//                 std::memcpy(record_data + column.offset + sizeof(size_t), str_value.c_str(), str_length);
-//                 break;
-//             }
-//             default:
-//                 throw std::runtime_error("Unsupported column type for INSERT.");
-//         }
-//     }
-//     // 执行插入到页面
-//     RID rid; // 记录ID（如果需要）
-//     storage::Page* page = bufferManager_->fetchPage(table_info->getFirstPageID());
-//     return page->insertRecord(record_data, sizeof(record_data), &rid); // 将记录插入到页面
-// }
-//
-//
-// // 执行SELECT操作
-// QueryResult ExecutionEngine::executeSelect(const SelectAST& select_ast) {
-//     return selectFromTable(select_ast);
-//
-// }
-// // 执行SELECT操作
-// QueryResult ExecutionEngine::selectFromTable(const SelectAST& select_ast) {
-//     const TableInfo* table_info = catalog_->get_table(select_ast.tableName);
-//     if (!table_info) {
-//         throw std::runtime_error("Table does not exist: " + select_ast.tableName);
-//     }
-//
-//     QueryResult result;  // 查询结果
-//     const Schema& schema = table_info->get_schema(); // 获取表的模式
-//     storage::Page* page = bufferManager_->fetchPage(table_info->getFirstPageID()); // 获取第一页
-//
-//     RID rid{0, 0}; // 初始化RID
-//
-//     if (select_ast.columns.size() == 1 && select_ast.columns[0] == "*") {
-//         // 查询所有列
-//         while (page->getNextRecord(rid)) { // 使用 getNextRecord
-//             char buffer[PAGE_SIZE]; // 缓存记录
-//             if (page->getRecord(rid, buffer)) {
-//                 std::vector<Value> rowValues; // 每行的值
-//                 for (uint32_t colIndex = 0; colIndex < schema.get_column_count(); ++colIndex) {
-//                     const MyColumn& column = schema.get_column(colIndex);
-//                     Value value;
-//
-//                     // 根据列类型读取值
-//                     if (column.type == TypeId::INTEGER) {
-//                         value = Value(*reinterpret_cast<int32_t*>(buffer + column.offset));
-//                     } else if (column.type == TypeId::BOOLEAN) {
-//                         value = Value(*reinterpret_cast<bool*>(buffer + column.offset));
-//                     } else if (column.type == TypeId::VARCHAR) {
-//                         // 假设以'\0'结束的字符串存储
-//                         value = Value(std::string(buffer + column.offset));
-//                     }
-//                     rowValues.push_back(value); // 将值添加到行数据中
-//                 }
-//
-//                 // 转换 rowValues 为字符串
-//                 std::vector<std::string> rowStrings; // 创建一个新的字符串向量
-//                 for (const auto& val : rowValues) {
-//                     rowStrings.push_back(val.toString()); // 假设Value有toString()方法
-//                 }
-//                 result.addRow(rowStrings); // 添加字符串行到结果中
-//             }
-//         }
-//     } else {
-//         // 查询特定列
-//         for (const auto& column_name : select_ast.columns) {
-//             if (!schema.has_column(column_name)) {
-//                 throw std::runtime_error("Column does not exist: " + column_name);
-//             }
-//         }
-//
-//         while (page->getNextRecord(rid)) { // 使用 getNextRecord
-//             char buffer[PAGE_SIZE];
-//             if (page->getRecord(rid, buffer)) {
-//                 std::vector<Value> rowValues; // 读取每行的值
-//                 for (const auto& column_name : select_ast.columns) {
-//                     uint32_t colIndex = schema.get_column_index(column_name);
-//                     const MyColumn& column = schema.get_column(colIndex);
-//                     Value value;
-//
-//                     // 根据列类型读取值
-//                     if (column.type == TypeId::INTEGER) {
-//                         value = Value(*reinterpret_cast<int32_t*>(buffer + column.offset));
-//                     } else if (column.type == TypeId::BOOLEAN) {
-//                         value = Value(*reinterpret_cast<bool*>(buffer + column.offset));
-//                     } else if (column.type == TypeId::VARCHAR) {
-//                         value = Value(std::string(buffer + column.offset)); // 假设以'\0'结束的字符串存储
-//                     }
-//                     rowValues.push_back(value); // 将读取的值添加到行数据中
-//                 }
-//                 // 转换 rowValues 为字符串
-//                 std::vector<std::string> rowStrings; // 创建一个新的字符串向量
-//                 for (const auto& val : rowValues) {
-//                     rowStrings.push_back(val.toString()); // 将Value对象转换为字符串
-//                 }
-//                 result.addRow(rowStrings); // 添加字符串行到结果中
-//             }
-//         }
-//     }
-//     return result; // 返回查询结果
-// }
-//
-// // 执行DELETE操作
-// // bool ExecutionEngine::executeDelete(const DeleteAST& delete_ast) {
-// //     const TableInfo* table_info = catalog_->get_table(delete_ast.tableName);
-// //     if (!table_info) {
-// //         throw std::runtime_error("Table does not exist: " + delete_ast.tableName);
-// //     }
-// //
-// //     storage::Page* page = bufferManager_->fetchPage(table_info->getFirstPageID());
-// //
-// //     // 根据条件查找并删除记录
-// //     if (delete_ast.condition.has_value()) {
-// //         const auto& condition = delete_ast.condition.value();
-// //         for (RID rid; page->getNextRecord(rid); ) {
-// //             char buffer[PAGE_SIZE];
-// //             if (page->getRecord(rid, buffer)) {
-// //                 // 从buffer中提取出字段值进行条件判断
-// //                 Value value; // 假设我们将要进行比较的值
-// //                 // 根据 condition 检查是否满足条件
-// //                 // if (value.equals(condition)) {
-// //                 //     page->deleteRecord(rid);  // 如果满足条件，则删除该记录
-// //                 // }
-// //             }
-// //         }
-// //     } else {
-// //         // 无条件，删除所有记录
-// //         for (RID rid; page->getNextRecord(rid); ) {
-// //             page->deleteRecord(rid);
-// //         }
-// //     }
-// //
-// //     return true; // 执行成功与否返回
-// // }
-//
-// // 顺序扫描
-//     QueryResult ExecutionEngine::executeSeqScan(const SeqScanAST& seqScanAST) {
-//     const TableInfo* table_info = catalog_->get_table(seqScanAST.tableName);
-//     if (!table_info) {
-//         throw std::runtime_error("Table does not exist: " + seqScanAST.tableName);
-//     }
-//
-//     QueryResult result; // 保存扫描结果
-//     const Schema& schema = table_info->get_schema();
-//     storage::Page* page = bufferManager_->fetchPage(table_info->getFirstPageID());
-//
-//     RID rid{0, 0}; // 初始化RID
-//     while (page->getNextRecord(rid)) { // 循环获取每个记录
-//         char buffer[PAGE_SIZE];
-//         if (page->getRecord(rid, buffer)) {
-//             std::vector<Value> rowValues;
-//             for (uint32_t colIndex = 0; colIndex < schema.get_column_count(); ++colIndex) {
-//                 const MyColumn& column = schema.get_column(colIndex);
-//                 if (column.type == TypeId::INTEGER) {
-//                     rowValues.emplace_back(*reinterpret_cast<int32_t*>(buffer + column.offset));
-//                 } else if (column.type == TypeId::BOOLEAN) {
-//                     rowValues.emplace_back(*reinterpret_cast<bool*>(buffer + column.offset));
-//                 } else if (column.type == TypeId::VARCHAR) {
-//                     rowValues.emplace_back(std::string(buffer + column.offset));
-//                 }
-//             }
-//             // 转换为字符串并添加到结果
-//             std::vector<std::string> rowStrings;
-//             for (const auto& value : rowValues) {
-//                 rowStrings.push_back(value.toString());
-//             }
-//             result.addRow(rowStrings);
-//         }
-//     }
-//     return result; // 返回完整的查询结果
-// }
-//
-// // //过滤
-// //     QueryResult ExecutionEngine::executeFilter(const FilterAST& filterAST) {
-// //     QueryResult result = executeSeqScan(filterAST.seqScan); // 首先执行顺序扫描
-// //
-// //     // 过滤处理
-// //     QueryResult filteredResult;
-// //     for (const auto& row : result.getRows()) {
-// //         // 获取 condition 中的列名、值和条件类型
-// //         const std::string& columnName = filterAST.condition.getColumnName();
-// //         const auto& conditionValue = filterAST.condition.getValue();
-// //         ConditionType conditionType = filterAST.condition.getConditionType();
-// //
-// //         // 在行中查找对应列值
-// //         for (size_t i = 0; i < row.size(); ++i) {
-// //             // 假设 row[i] 是来自 `Value` 的返回值，需要查找相应列的值
-// //             if (schema.get_columns()[i].name == columnName) {
-// //                 const Value& rowValue = row[i];
-// //                 bool matches = false;
-// //
-// //                 // 比较条件类型
-// //                 switch (conditionType) {
-// //                     case ConditionType::EQUALS:
-// //                         matches = (rowValue.equals(std::get<decltype(rowValue)>(conditionValue)));
-// //                         break;
-// //                     case ConditionType::NOT_EQUALS:
-// //                         matches = !(rowValue.equals(std::get<decltype(rowValue)>(conditionValue)));
-// //                         break;
-// //                     case ConditionType::GREATER_THAN:
-// //                         matches = rowValue.greaterThan(std::get<decltype(rowValue)>(conditionValue));
-// //                         break;
-// //                     case ConditionType::LESS_THAN:
-// //                         matches = rowValue.lessThan(std::get<decltype(rowValue)>(conditionValue));
-// //                         break;
-// //                         // 可以添加更多条件类型的逻辑
-// //                 }
-// //
-// //                 // 如果匹配条件，则添加到结果
-// //                 if (matches) {
-// //                     filteredResult.addRow(row);
-// //                 }
-// //                 break; // 找到对应列后可以直接跳出
-// //             }
-// //         }
-// //     }
-// //     return filteredResult; // 返回过滤后的结果
-// // }
-//
-//
-// //投影
-//     QueryResult ExecutionEngine::executeProject(const ProjectAST& projectAST) {
-//     QueryResult result = executeSeqScan(projectAST.seqScan); // 首先执行顺序扫描
-//
-//     // 投影处理
-//     QueryResult projectedResult;
-//     for (const auto& row : result.getRows()) {
-//         std::vector<std::string> projectedRow;
-//         for (const auto& columnName : projectAST.columns) {
-//             // 通过列名查找并添加到投影结果
-//             for (size_t i = 0; i < row.size(); ++i) {
-//                 if (row[i] == columnName) {
-//                     projectedRow.push_back(row[i]); // 假设 row[i] 存储的是列的值
-//                     break; // 找到后可以直接跳出
-//                 }
-//             }
-//         }
-//         projectedResult.addRow(projectedRow);
-//     }
-//     return projectedResult; // 返回投影后的结果
-// }
-//
-//
-//
-// } // namespace minidb
-//
-
 #include "../include/engine/ExecutionEngine.h"
-#include "engine/catalog/catalog_manager.h"
-#include "../include/storage/BufferManager.h"
-#include "common/QueryResult.h"
-#include "common/Value.h"
+#include "common/Exception.h"
 #include <cstring>
-
+#include <algorithm>
 
 namespace minidb {
 
-// 执行创建表
-QueryResult ExecutionEngine::executeCreateTable(const nlohmann::json& plan) {
+void ExecutionEngine::scanTablePages(const TableInfo *table_info,
+                                     const std::function<void(storage::Page *, RID &)> &callback) {
+    PageID pid = table_info->getFirstPageID();
+    while (pid != INVALID_PAGE_ID) {
+        storage::Page *page = bufferManager_->fetchPage(pid);
+        if (!page) {
+            throw std::runtime_error("Failed to fetch page: " + std::to_string(pid));
+        }
+        RID rid{pid, static_cast<uint16_t>(-1)}; // 初始化为 -1 才能取到第0条
+        while (page->getNextRecord(rid)) {
+            callback(page, rid);
+        }
+        pid = page->getNextPageId();
+    }
+}
+
+PageID ExecutionEngine::appendNewPageToTable(TableInfo *table_info) {
+    PageID new_pid = bufferManager_->allocatePage();
+    storage::Page *new_page = bufferManager_->fetchPage(new_pid);
+    new_page->initAsDataPage();
+    new_page->setNextPageId(INVALID_PAGE_ID);
+
+    PageID last_pid = table_info->getFirstPageID();
+    storage::Page *last_page = bufferManager_->fetchPage(last_pid);
+    while (last_page->getNextPageId() != INVALID_PAGE_ID) {
+        last_pid = last_page->getNextPageId();
+        last_page = bufferManager_->fetchPage(last_pid);
+    }
+    last_page->setNextPageId(new_pid);
+    last_page->setDirty(true);
+
+    new_page->setDirty(true);
+    return new_pid;
+}
+
+QueryResult ExecutionEngine::executeCreateTable(const nlohmann::json &plan) {
     std::string tableName = plan["tableName"];
     Schema schema;
 
-    uint32_t offset = 0; // 偏移量初始化
-
-    // 解析AST中的列定义并构造Schema
-    for (const auto& col : plan["columns"]) {
+    uint32_t offset = 0;
+    for (const auto &col : plan["columns"]) {
         TypeId type_id = catalog_->getTypeIdFromString(col["type"]);
-        uint32_t length = (type_id == TypeId::VARCHAR) ? 255 : 4; // 假设VARCHAR最大长度为255
-        MyColumn new_column(col["name"], type_id, length, offset);
-        schema.addColumn(new_column);
-        offset += length; // 更新偏移量
+        uint32_t length = (type_id == TypeId::VARCHAR) ? 255 : 4;
+        schema.addColumn(MyColumn(col["name"], type_id, length, offset));
+        offset += length;
     }
 
     if (!catalog_->create_table(tableName, schema)) {
         handleError("Failed to create table: " + tableName);
     }
 
-    return QueryResult(); // 返回成功或空的结果集
-}
-
-QueryResult ExecutionEngine::executeInsert(const nlohmann::json& plan) {
-    try {
-        std::cout << "=== executeInsert START ===" << std::endl;
-
-        std::string tableName = plan["tableName"];
-        std::vector<std::string> values = plan["values"];
-
-        std::cout << "Inserting into table: " << tableName << std::endl;
-        std::cout << "Values count: " << values.size() << std::endl;
-
-        const TableInfo* table_info = catalog_->get_table(tableName);
-        if (!table_info) {
-            throw std::runtime_error("Table does not exist: " + tableName);
-        }
-
-        PageID first_page_id = table_info->getFirstPageID();
-        std::cout << "First page ID: " << first_page_id << std::endl;
-
-        storage::Page* page = bufferManager_->fetchPage(first_page_id);
-        if (!page) {
-            throw std::runtime_error("Failed to fetch page: " + std::to_string(first_page_id));
-        }
-
-        // 获取 schema 来计算记录大小
-        const Schema& schema = table_info->get_schema();
-        size_t record_size = 0;
-
-        // 计算总记录大小
-        for (uint32_t i = 0; i < schema.get_column_count(); ++i) {
-            const MyColumn& column = schema.get_column(i);
-            if (column.type == TypeId::INTEGER) {
-                record_size += sizeof(int32_t);
-            } else if (column.type == TypeId::BOOLEAN) {
-                record_size += sizeof(bool);
-            } else if (column.type == TypeId::VARCHAR) {
-                record_size += column.length; // 使用固定长度
-            }
-        }
-
-        std::cout << "Calculated record size: " << record_size << " bytes" << std::endl;
-
-        // 使用动态分配的缓冲区
-        std::vector<char> record_data(record_size, 0);
-
-        // 或者如果你更喜欢固定数组，计算实际使用的大小
-        // char record_buffer[PAGE_SIZE];
-        // std::memset(record_buffer, 0, record_size); // 只清零需要的部分
-
-        size_t current_offset = 0;
-
-        for (size_t i = 0; i < values.size(); ++i) {
-            const MyColumn& column = schema.get_column(static_cast<uint32_t>(i));
-            std::cout << "Processing column " << i << ": " << column.name
-                     << ", type: " << static_cast<int>(column.type)
-                     << ", offset: " << current_offset << std::endl;
-
-            if (column.type == TypeId::INTEGER) {
-                try {
-                    int32_t value = std::stoi(values[i]);
-                    std::memcpy(record_data.data() + current_offset, &value, sizeof(int32_t));
-                    current_offset += sizeof(int32_t);
-                } catch (const std::exception& e) {
-                    throw std::runtime_error("Failed to convert to integer: '" + values[i] + "'");
-                }
-            } else if (column.type == TypeId::BOOLEAN) {
-                bool value = (values[i] == "true" || values[i] == "1");
-                std::memcpy(record_data.data() + current_offset, &value, sizeof(bool));
-                current_offset += sizeof(bool);
-            } else if (column.type == TypeId::VARCHAR) {
-                std::string value = values[i];
-                size_t copy_size = std::min(value.size(), static_cast<size_t>(column.length));
-                std::memcpy(record_data.data() + current_offset, value.c_str(), copy_size);
-
-                // 如果字符串较短，用null终止符填充剩余空间
-                if (copy_size < static_cast<size_t>(column.length)) {
-                    std::memset(record_data.data() + current_offset + copy_size, 0,
-                               column.length - copy_size);
-                }
-                current_offset += column.length;
-            }
-        }
-
-        // 添加调试信息
-        std::cout << "=== PAGE DEBUG INFO ===" << std::endl;
-        std::cout << "Page ID: " << page->getPageId() << std::endl;
-        std::cout << "Page free space: " << page->getFreeSpace() << std::endl;
-        std::cout << "Record size to insert: " << record_size << std::endl;
-
-        RID rid;
-        std::cout << "Attempting to insert record..." << std::endl;
-
-        // 关键修复：使用实际记录大小而不是 PAGE_SIZE
-        if (!page->insertRecord(record_data.data(), record_size, &rid)) {
-            std::cout << "Insert failed. Page free space: " << page->getFreeSpace()
-                     << ", needed: " << record_size << std::endl;
-            throw std::runtime_error("Failed to insert record into page");
-        }
-
-        std::cout << "Record inserted successfully, RID: " << rid.page_id << ", " << rid.slot_num << std::endl;
-
-        page->setDirty(true);
-        std::cout << "=== executeInsert SUCCESS ===" << std::endl;
-        return QueryResult();
-
-    } catch (const std::exception& e) {
-        std::cerr << "ERROR in executeInsert: " << e.what() << std::endl;
-        throw;
-    }
-}
-// 执行选择操作
-QueryResult ExecutionEngine::executeSelect(const nlohmann::json& plan) {
-    std::string tableName = plan["tableName"];
-    std::vector<std::string> columns = plan["columns"];
-
-    const TableInfo* table_info = catalog_->get_table(tableName);
+    TableInfo *table_info = catalog_->get_table(tableName);
     if (!table_info) {
-        handleError("Table does not exist: " + tableName);
+        handleError("Table creation failed: " + tableName);
+    }
+
+    PageID first_page_id = bufferManager_->allocatePage();
+    storage::Page *page = bufferManager_->fetchPage(first_page_id);
+    page->initAsDataPage();
+    page->setNextPageId(INVALID_PAGE_ID);
+    page->setDirty(true);
+
+    table_info->setFirstPageID(first_page_id);
+
+    return QueryResult();
+}
+
+QueryResult ExecutionEngine::executeInsert(const nlohmann::json &plan) {
+    std::string tableName = plan["tableName"];
+    std::vector<std::string> values = plan["values"];
+
+    TableInfo *table_info = catalog_->get_table(tableName);
+    if (!table_info) handleError("Table does not exist: " + tableName);
+
+    const Schema &schema = table_info->get_schema();
+    size_t record_size = 0;
+    for (uint32_t i = 0; i < schema.get_column_count(); ++i) {
+        const MyColumn &column = schema.get_column(i);
+        record_size += (column.type == TypeId::VARCHAR) ? column.length :
+                       (column.type == TypeId::BOOLEAN ? sizeof(bool) : sizeof(int32_t));
+    }
+
+    std::vector<char> record_data(record_size, 0);
+    size_t current_offset = 0;
+    for (size_t i = 0; i < values.size(); ++i) {
+        const MyColumn &column = schema.get_column(static_cast<uint32_t>(i));
+        if (column.type == TypeId::INTEGER) {
+            int32_t v = std::stoi(values[i]);
+            std::memcpy(record_data.data() + current_offset, &v, sizeof(int32_t));
+            current_offset += sizeof(int32_t);
+        } else if (column.type == TypeId::BOOLEAN) {
+            bool v = (values[i] == "true" || values[i] == "1");
+            std::memcpy(record_data.data() + current_offset, &v, sizeof(bool));
+            current_offset += sizeof(bool);
+        } else if (column.type == TypeId::VARCHAR) {
+            size_t copy_size = std::min(values[i].size(), static_cast<size_t>(column.length));
+            std::memcpy(record_data.data() + current_offset, values[i].c_str(), copy_size);
+            current_offset += column.length;
+        }
+    }
+
+    PageID pid = table_info->getFirstPageID();
+    storage::Page *page = bufferManager_->fetchPage(pid);
+    RID rid;
+    while (!page->insertRecord(record_data.data(), record_size, &rid)) {
+        if (page->getNextPageId() == INVALID_PAGE_ID) {
+            pid = appendNewPageToTable(table_info);
+            page = bufferManager_->fetchPage(pid);
+        } else {
+            pid = page->getNextPageId();
+            page = bufferManager_->fetchPage(pid);
+        }
+    }
+    page->setDirty(true);
+
+    return QueryResult();
+}
+
+// QueryResult ExecutionEngine::executeSelect(const nlohmann::json &plan) {
+//     std::string tableName = plan["tableName"];
+//     std::vector<std::string> columns = plan["columns"];
+//
+//     const TableInfo *table_info = catalog_->get_table(tableName);
+//     if (!table_info) handleError("Table does not exist: " + tableName);
+//
+//     QueryResult result;
+//     scanTablePages(table_info, [&](storage::Page *page, RID &rid) {
+//         char buffer[PAGE_SIZE];
+//         if (page->getRecord(rid, buffer)) {
+//             std::vector<std::string> rowValues;
+//             for (const auto &column : columns) {
+//                 uint32_t colIndex = table_info->get_schema().get_column_index(column);
+//                 const MyColumn &columnInfo = table_info->get_schema().get_column(colIndex);
+//                 if (columnInfo.type == TypeId::INTEGER) {
+//                     rowValues.push_back(std::to_string(*reinterpret_cast<int32_t *>(buffer + columnInfo.offset)));
+//                 } else if (columnInfo.type == TypeId::BOOLEAN) {
+//                     rowValues.push_back(*reinterpret_cast<bool *>(buffer + columnInfo.offset) ? "true" : "false");
+//                 } else if (columnInfo.type == TypeId::VARCHAR) {
+//                     rowValues.push_back(std::string(buffer + columnInfo.offset));
+//                 }
+//             }
+//             result.addRow(rowValues);
+//         }
+//     });
+//     return result;
+// }
+//
+
+
+    // SELECT 执行
+    QueryResult ExecutionEngine::executeSelect(const nlohmann::json &plan) {
+    std::string tableName = plan["tableName"];
+    TableInfo *tableInfo = catalog_->get_table(tableName);
+    if (!tableInfo) {
+        throw std::runtime_error("Table not found: " + tableName);
     }
 
     QueryResult result;
-    PageID first_page_id = table_info->getFirstPageID();
-    storage::Page* page = bufferManager_->fetchPage(first_page_id);
-    RID rid{0, 0};
-    char buffer[PAGE_SIZE];
 
-    while (page->getNextRecord(rid)) {
-        if (page->getRecord(rid, buffer)) {
-            std::vector<std::string> rowValues;
-            for (const auto& column : columns) {
-                uint32_t colIndex = table_info->get_schema().get_column_index(column);
-                const MyColumn& columnInfo = table_info->get_schema().get_column(colIndex);
-                if (columnInfo.type == TypeId::INTEGER) {
-                    rowValues.push_back(std::to_string(*reinterpret_cast<int32_t*>(buffer + columnInfo.offset)));
-                } else if (columnInfo.type == TypeId::BOOLEAN) {
-                    rowValues.push_back(*reinterpret_cast<bool*>(buffer + columnInfo.offset) ? "true" : "false");
-                } else if (columnInfo.type == TypeId::VARCHAR) {
-                    rowValues.push_back(std::string(buffer + columnInfo.offset));
-                }
-            }
-            result.addRow(rowValues);
-        }
+    // 设置列名
+    std::vector<std::string> colNames;
+    for (auto &col : tableInfo->get_schema().get_columns()) {
+        colNames.push_back(col.get_name());
     }
-    return result; // 返回查询结果
+    result.setColumnNames(colNames);
+
+    // 仅扫描首个 page
+    PageID pid = tableInfo->getFirstPageID();
+    scanSinglePage(pid, tableInfo->get_schema(), result);
+
+    return result;
 }
 
-
-// 执行删除操作
-    // 执行删除操作
-    QueryResult ExecutionEngine::executeDelete(const nlohmann::json& plan) {
+QueryResult ExecutionEngine::executeDelete(const nlohmann::json &plan) {
     std::string tableName = plan["tableName"];
-    const TableInfo* table_info = catalog_->get_table(tableName);
-    if (!table_info) {
-        handleError("Table does not exist: " + tableName);
-    }
-
-    PageID first_page_id = table_info->getFirstPageID();
-    storage::Page* page = bufferManager_->fetchPage(first_page_id);
-    RID rid{0, 0};
+    TableInfo *table_info = catalog_->get_table(tableName);
+    if (!table_info) handleError("Table does not exist: " + tableName);
 
     if (plan.contains("condition")) {
         auto condition = plan["condition"];
-
-        // 获取列名和条件值
         std::string column_name = condition["column"];
         std::string condition_value = condition["value"];
         std::string condition_op = condition["op"];
-
         uint32_t colIndex = table_info->get_schema().get_column_index(column_name);
 
-        while (page->getNextRecord(rid)) {
+        scanTablePages(table_info, [&](storage::Page *page, RID &rid) {
             char buffer[PAGE_SIZE];
             if (page->getRecord(rid, buffer)) {
-                Value column_value;
-                const MyColumn& column = table_info->get_schema().get_column(colIndex);
+                const MyColumn &column = table_info->get_schema().get_column(colIndex);
+                Value col_val;
+                if (column.type == TypeId::INTEGER)
+                    col_val = Value(*reinterpret_cast<int32_t *>(buffer + column.offset));
+                else if (column.type == TypeId::BOOLEAN)
+                    col_val = Value(*reinterpret_cast<bool *>(buffer + column.offset));
+                else if (column.type == TypeId::VARCHAR)
+                    col_val = Value(std::string(buffer + column.offset));
 
-                if (column.type == TypeId::INTEGER) {
-                    column_value = Value(*reinterpret_cast<int32_t*>(buffer + column.offset));
-                } else if (column.type == TypeId::BOOLEAN) {
-                    column_value = Value(*reinterpret_cast<bool*>(buffer + column.offset));
-                } else if (column.type == TypeId::VARCHAR) {
-                    column_value = Value(std::string(buffer + column.offset));
-                }
+                bool match = false;
+                if (condition_op == "EQUALS") match = col_val.equals(Value(condition_value));
+                else if (condition_op == "NOT_EQUALS") match = !col_val.equals(Value(condition_value));
+                else if (condition_op == "GREATER_THAN") match = col_val.greaterThan(Value(condition_value));
+                else if (condition_op == "LESS_THAN") match = col_val.lessThan(Value(condition_value));
+                else if (condition_op == "GREATER_THAN_OR_EQUAL") match = col_val.greaterThanOrEquals(Value(condition_value));
+                else if (condition_op == "LESS_THAN_OR_EQUAL") match = col_val.lessThanOrEquals(Value(condition_value));
 
-                // 验证记录是否满足条件
-                bool condition_met = false;
-
-                if (condition_op == "EQUALS") {
-                    condition_met = column_value.equals(Value(condition_value));
-                } else if (condition_op == "NOT_EQUALS") {
-                    condition_met = !column_value.equals(Value(condition_value));
-                } else if (condition_op == "GREATER_THAN") {
-                    condition_met = column_value.greaterThan(Value(condition_value));
-                } else if (condition_op == "LESS_THAN") {
-                    condition_met = column_value.lessThan(Value(condition_value));
-                } else if (condition_op == "GREATER_THAN_OR_EQUAL") {
-                    condition_met = column_value.greaterThanOrEquals(Value(condition_value));
-                } else if (condition_op == "LESS_THAN_OR_EQUAL") {
-                    condition_met = column_value.lessThanOrEquals(Value(condition_value));
-                }
-
-                if (condition_met) {
+                if (match) {
                     page->deleteRecord(rid);
+                    page->setDirty(true);
                 }
             }
-        }
+        });
     } else {
-        while (page->getNextRecord(rid)) {
+        scanTablePages(table_info, [&](storage::Page *page, RID &rid) {
             page->deleteRecord(rid);
+            page->setDirty(true);
+        });
+    }
+    return QueryResult();
+}
+
+QueryResult ExecutionEngine::executeUpdate(const nlohmann::json &plan) {
+    std::string tableName = plan["tableName"];
+    TableInfo *table_info = catalog_->get_table(tableName);
+    if (!table_info) handleError("Table does not exist: " + tableName);
+
+    auto updates = plan["updates"];
+    scanTablePages(table_info, [&](storage::Page *page, RID &rid) {
+        char buffer[PAGE_SIZE];
+        uint16_t size;
+        if (page->getRecord(rid, buffer, &size)) {
+            for (const auto &upd : updates) {
+                uint32_t colIndex = table_info->get_schema().get_column_index(upd["column"]);
+                const MyColumn &col = table_info->get_schema().get_column(colIndex);
+                if (col.type == TypeId::INTEGER) {
+                    int32_t v = std::stoi(upd["value"].get<std::string>());
+                    std::memcpy(buffer + col.offset, &v, sizeof(v));
+                } else if (col.type == TypeId::BOOLEAN) {
+                    bool v = (upd["value"] == "true" || upd["value"] == "1");
+                    std::memcpy(buffer + col.offset, &v, sizeof(v));
+                } else if (col.type == TypeId::VARCHAR) {
+                    std::string v = upd["value"];
+                    size_t copy_size = std::min(v.size(), (size_t)col.length);
+                    std::memcpy(buffer + col.offset, v.c_str(), copy_size);
+                }
+            }
+            page->updateRecord(rid, buffer, table_info->get_schema().get_length());
+            page->setDirty(true);
         }
-    }
+    });
+    return QueryResult();
+}
 
-    page->setDirty(true);
-    return QueryResult(); // 返回成功或空的结果集
+// 扫描单个 Page 所有有效记录
+//     void ExecutionEngine::scanSinglePage(PageID pid, const Schema &schema, QueryResult &result) {
+//         storage::Page* page = bufferManager_->fetchPage(pid);
+//     uint16_t slot_count = page->getSlotCount();
+//
+//     std::cout << "[DEBUG scan] page_id=" << pid
+//               << " slot_count=" << slot_count << std::endl;
+//
+//     char buf[PAGE_SIZE];
+//     uint16_t size;
+//
+//     for (uint16_t slot = 0; slot < slot_count; slot++) {
+//         if (page->getSlotSize(slot) == 0) continue;
+//
+//         RID rid;
+//         rid.page_id = pid;
+//         rid.slot_num = slot;
+//
+//         if (!page->getRecord(rid, buf, &size)) {
+//             std::cout << "[DEBUG] getRecord failed for slot " << slot << std::endl;
+//             continue;
+//         }
+//
+//         std::cout << "[DEBUG] Read slot=" << slot
+//                   << " size=" << size << std::endl;
+//
+//         QueryResult::Row row;
+//         size_t offset = 0;
+//
+//         for (size_t col_idx = 0; col_idx < schema.get_column_count(); col_idx++) {
+//             const MyColumn &col = schema.get_column(col_idx);
+//             if (col.get_type() == TypeId::INTEGER) {
+//                 int val;
+//                 std::memcpy(&val, buf + offset, sizeof(int));
+//                 offset += sizeof(int);
+//                 row.push_back(std::to_string(val));
+//             }
+//             else if (col.get_type() == TypeId::VARCHAR) {
+//                 uint32_t str_len;
+//                 std::memcpy(&str_len, buf + offset, sizeof(uint32_t));
+//                 offset += sizeof(uint32_t);
+//                 std::string str(buf + offset, str_len);
+//                 offset += str_len;
+//                 row.push_back(str);
+//             }
+//         }
+//
+//         result.addRow(row);
+//     }
+// }
+    void ExecutionEngine::scanSinglePage(PageID pid, const Schema &schema, QueryResult &result) {
+    storage::Page* page = bufferManager_->fetchPage(pid);
+    uint16_t slot_count = page->getSlotCount();
+
+    std::cout << "[DEBUG scan] page_id=" << pid
+              << " slot_count=" << slot_count << std::endl;
+
+    char buf[PAGE_SIZE];
+    uint16_t size;
+
+    for (uint16_t slot = 0; slot < slot_count; slot++) {
+        if (page->getSlotSize(slot) == 0) continue;
+
+        RID rid{pid, slot};
+
+        if (!page->getRecord(rid, buf, &size)) {
+            std::cout << "[DEBUG] getRecord failed for slot " << slot << std::endl;
+            continue;
+        }
+
+        std::cout << "[DEBUG] Read slot=" << slot << " size=" << size << std::endl;
+
+        QueryResult::Row row;
+        size_t offset = 0;
+
+        for (uint32_t col_idx = 0; col_idx < schema.get_column_count(); col_idx++) {
+            const MyColumn &col = schema.get_column(static_cast<uint32_t>(col_idx));
+
+            if (col.type == TypeId::INTEGER) {
+                int32_t val;
+                std::memcpy(&val, buf + offset, sizeof(int32_t));
+                offset += sizeof(int32_t);
+                row.push_back(std::to_string(val));
+            }
+            else if (col.type == TypeId::BOOLEAN) {
+                bool val;
+                std::memcpy(&val, buf + offset, sizeof(bool));
+                offset += sizeof(bool);
+                row.push_back(val ? "true" : "false");
+            }
+            else if (col.type == TypeId::VARCHAR) {
+                // 直接定长读取
+                std::string str(buf + offset, col.length);
+                // 去掉填充的 '\0'
+                str.erase(str.find_first_of('\0'));
+                offset += col.length;
+                row.push_back(str);
+            }
+        }
+
+        result.addRow(row);
+    }
 }
 
 
-// 主要执行计划函数
-QueryResult ExecutionEngine::executePlan(const nlohmann::json& plan) {
+
+QueryResult ExecutionEngine::executePlan(const nlohmann::json &plan) {
     std::string type = plan["type"];
-
-    if (type == "CreateTable") {
-        return executeCreateTable(plan);
-    } else if (type == "Insert") {
-        return executeInsert(plan);
-    } else if (type == "Select") {
-        return executeSelect(plan);
-    } else if (type == "Delete") {
-        return executeDelete(plan);
-    } else {
-        throw std::runtime_error("Unsupported execution plan type: " + type);
-    }
+    if (type == "CreateTable") return executeCreateTable(plan);
+    else if (type == "Insert") return executeInsert(plan);
+    else if (type == "Select") return executeSelect(plan);
+    else if (type == "Delete") return executeDelete(plan);
+    else if (type == "Update") return executeUpdate(plan);
+    else throw std::runtime_error("Unsupported execution plan type: " + type);
 }
 
-} // mespace minidbbce minidb
+} // namespace minidb

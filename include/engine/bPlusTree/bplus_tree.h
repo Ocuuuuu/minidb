@@ -13,8 +13,13 @@ namespace engine {
 class BPlusTreePage; // 前向声明
 
 // B+树节点常量定义
-constexpr int LEAF_NODE_MAX_KEYS = 32;      // 叶子节点最大键数
-constexpr int INTERNAL_NODE_MAX_KEYS = 32;  // 内部节点最大键数
+// constexpr int LEAF_NODE_MAX_KEYS = 32;      // 叶子节点最大键数
+// constexpr int INTERNAL_NODE_MAX_KEYS = 32;  // 内部节点最大键数
+
+
+    // B+树节点常量定义
+    constexpr int LEAF_NODE_MAX_KEYS = 4;      // 叶子节点最大键数（调小触发分裂）
+    constexpr int INTERNAL_NODE_MAX_KEYS = 4;  // 内部节点最大键数
 
 class BPlusTree {
 public:

@@ -456,9 +456,7 @@ TEST_CASE("Page Boundary Conditions", "[page][boundary]") {
 }
 
 // 添加一个辅助函数来获取槽位数量（如果需要的话）
-uint16_t getSlotCount(const Page& page) {
-    return page.getHeader().slot_count;
-}
+
 
 TEST_CASE("Page Slot Count Access", "[page][slotcount]") {
     Page page(1);

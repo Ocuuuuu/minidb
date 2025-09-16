@@ -107,21 +107,12 @@ namespace minidb {
             return allocated_pages_.find(page_id) != allocated_pages_.end();
         }
 
+
         bool Pager::isValidPage(PageID page_id) const {
-            // 检查页面ID是否有效
-            if (page_id == INVALID_PAGE_ID || page_id < 0) {
-                return false;
-            }
-
-            // 检查页面ID是否在合理范围内
-            PageID page_count = getPageCount();
-            if (page_id >= page_count) {
-                return false;
-            }
-
-            // 额外的检查：页面是否真的被Pager分配过
-            std::lock_guard<std::mutex> lock(pager_mutex_);
-            return allocated_pages_.find(page_id) != allocated_pages_.end();
+            std::cout << "[DEBUG] isValidPage(" << page_id
+                      << ") page_count=" << getPageCount() << std::endl;
+            if (page_id == INVALID_PAGE_ID || page_id < 0) return false;
+            return page_id < getPageCount();
         }
 
         void Pager::checkpoint() {

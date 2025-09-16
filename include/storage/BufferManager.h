@@ -44,6 +44,10 @@ namespace minidb {
 
             void setReplacementPolicy(BufferReplacementPolicy policy) { policy_ = policy; }
 
+            PageID allocatePage() {
+                return disk_manager_->allocatePage();
+            }
+
         private:
             std::shared_ptr<DiskManager> disk_manager_;
             size_t pool_size_;

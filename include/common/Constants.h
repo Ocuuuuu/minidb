@@ -5,6 +5,7 @@ namespace minidb {
 
     // 系统常量配置
 
+
     // 页面大小（4KB是数据库系统的常见选择）
     constexpr int PAGE_SIZE = 4096;
 
