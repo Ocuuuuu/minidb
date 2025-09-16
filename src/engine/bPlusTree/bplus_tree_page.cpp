@@ -23,24 +23,24 @@ namespace minidb
             const char* data = page_->getData();
             std::memcpy(&header_, data, sizeof(BPlusNodeHeader));
 
-            // 初始化新页面
-            if (header_.key_type == TypeId::INVALID) {
+            bool invalid_type = static_cast<int>(header_.key_type) < 0 ||
+                                static_cast<int>(header_.key_type) > static_cast<int>(TypeId::VARCHAR);
+
+            if (header_.key_count == 0 && invalid_type) {
                 header_.key_type = TypeId::INTEGER;
                 header_.key_size = calculate_key_size(TypeId::INTEGER);
-                header_.key_count = 0;
                 header_.is_leaf = false;
-                header_.next_page_id = 0;
+                header_.next_page_id = INVALID_PAGE_ID;
                 save_header();
             }
 
             if (header_.key_size == 0) {
                 header_.key_size = calculate_key_size(header_.key_type);
-                save_header(); // ✅ 不是 mark_dirty()
+                save_header();
             }
 
-            // 初始化内部节点的第一个指针
             if (!is_leaf() && header_.key_count == 0) {
-                set_child_page_id_at(0, 0);
+                set_child_page_id_at(0, INVALID_PAGE_ID);
             }
         }
 
@@ -126,54 +126,45 @@ namespace minidb
             if (!is_leaf() || is_full()) return false;
 
             int pos_hint = find_key_index(key);
-            if (pos_hint >= 0) return false; // 键已存在
+            if (pos_hint >= 0) return false; // 已存在
 
             int insert_pos = -pos_hint - 1;
             if (insert_pos < 0 || insert_pos > header_.key_count) return false;
 
-            // ✅ 先移动，再插入
-            if (insert_pos < header_.key_count) {
+            header_.key_count++; // ✅ 先加
+            if (insert_pos < header_.key_count - 1) { // 末尾插不用挪
                 shift_keys_right(insert_pos);
                 shift_values_right(insert_pos);
             }
+            save_header();
 
-            // ✅ 插入前增加 key_count
-            header_.key_count++;
-            save_header(); // ✅ 写回 header
-
-            // 直接写入（此时 index < key_count，不会触发增加）
             serialize_key(key, get_data_start() + get_key_offset(insert_pos));
             serialize_rid(rid, get_data_start() + get_value_offset(insert_pos));
             mark_dirty();
-
             return true;
         }
+
 
         bool BPlusTreePage::insert_internal_pair(const Value& key, PageID child_page_id) {
             if (is_leaf() || is_full()) return false;
 
             int pos_hint = find_key_index(key);
             if (pos_hint >= 0) return false;
-
             int insert_pos = -pos_hint - 1;
-            if (insert_pos < 0 || insert_pos > header_.key_count) return false;
 
-            if (insert_pos < header_.key_count) {
+            header_.key_count++; // ✅ 先加
+            if (insert_pos < header_.key_count - 1) {
                 shift_keys_right(insert_pos);
-                shift_values_right(insert_pos + 1); // 注意：内部节点有n+1个指针
+                shift_values_right(insert_pos + 1);
             }
-
-            // ✅ 先增加 key_count
-            header_.key_count++;
             save_header();
 
-            // 插入键和子指针
             serialize_key(key, get_data_start() + get_key_offset(insert_pos));
             serialize_page_id(child_page_id, get_data_start() + get_value_offset(insert_pos + 1));
             mark_dirty();
-
             return true;
         }
+
 
         bool BPlusTreePage::remove_leaf_pair(int index) {
             if (!is_leaf() || index < 0 || index >= header_.key_count) return false;
@@ -383,21 +374,11 @@ namespace minidb
 
         void BPlusTreePage::shift_keys_right(int start_index, int count) {
             if (start_index >= header_.key_count || count <= 0) return;
-
             char* data = get_data_start();
-            size_t key_size = get_key_size();
-            size_t pair_size = get_pair_size();
-
-            // 计算要移动的键数量
-            int move_count = header_.key_count - start_index;
-
-            // 源位置：从start_index开始的键
-            char* src = data + get_key_offset(start_index);
-            // 目标位置：向右移动count个键的位置
-            char* dest = src + count * pair_size;
-
-            // 移动键
-            std::memmove(dest, src, move_count * key_size);
+            size_t move_bytes = (header_.key_count - start_index) * get_key_size(); // ✅ 用实际 key_size
+            std::memmove(data + get_key_offset(start_index + count),
+                         data + get_key_offset(start_index),
+                         move_bytes);
         }
 
         void BPlusTreePage::shift_keys_left(int start_index, int count) {

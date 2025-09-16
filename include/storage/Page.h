@@ -4,6 +4,7 @@
 #include "common/Constants.h"   // 包含 PAGE_SIZE、INVALID_PAGE_ID 等常量
 #include "common/Types.h"       // 包含 PageID、RID 等类型定义
 #include <cstdint>              // 包含 uint16_t 等整数类型
+#include <cstring>
 #include <string>               // 用于 toString 函数返回值
 
 namespace minidb {
@@ -35,6 +36,16 @@ public:
     // 1. 构造函数（与 cpp 实现完全匹配）
     Page();                                  // 默认构造：pin_count=0，页头/数据区清零
     explicit Page(PageID page_id);           // 带页ID的构造：指定 page_id，其他同默认构造
+
+
+    // ✅ 新增的方法
+    uint16_t getSlotCount() const {
+        return header_.slot_count;
+    }
+    uint16_t getSlotSize(uint16_t slot_num) const;    // 获取指定槽位的记录大小
+    void setSlotSize(uint16_t slot_num, uint16_t size); // 设置指定槽位的记录大小
+
+
 
     // 2. 页面元数据访问接口（与 cpp 中成员变量逻辑匹配）
     PageID getPageId() const { return header_.page_id; }          // 获取页面ID
@@ -69,28 +80,44 @@ public:
     uint16_t getFreeSpace() const { return header_.free_space; }
     PageType getPageType() const { return header_.page_type; }
     void setPageType(PageType type) { header_.page_type = type; }
-    // 新增方法：获取数据区大小
-    size_t getDataSize() const { return sizeof(data_); }
-
-    // 新增方法：获取数据区指针（只读）
-    const char* getDataPtr() const { return data_; }
-
-    // 新增方法：获取数据区指针（可写）
-    char* getDataPtr() { return data_; }
-    bool getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) const; // 获取槽位完整信息
 
     // 获取下一条记录（按槽位顺序）
     bool getNextRecord(RID& rid) const;
+
+    // 在 storage/Page.h 里 Page 类中加
+    void initAsDataPage() {
+        header_.page_type = PageType::DATA_PAGE;
+        header_.slot_count = 0;
+        header_.free_space = PAGE_SIZE - sizeof(PageHeader);
+        header_.free_space_offset = PAGE_SIZE - sizeof(PageHeader);
+        header_.next_free_page = INVALID_PAGE_ID;
+        header_.is_dirty = true;
+        std::memset(data_, 0, sizeof(data_));
+    }
+
+    PageID getNextPageId() const {
+        return header_.next_free_page;
+    }
+
+    void setNextPageId(PageID pid) {
+        header_.next_free_page = pid;
+        header_.is_dirty = true;
+    }
+
+    // uint32_t getFreeSpace() const {
+    //     return header_.free_space;
+    // }
 
 private:
     // 7. 私有辅助函数（与 cpp 中槽位操作逻辑匹配，仅内部调用）
     uint16_t getSlotOffset(uint16_t slot_num) const;  // 获取指定槽位的记录偏移
     void setSlotOffset(uint16_t slot_num, uint16_t offset); // 设置指定槽位的记录偏移
-    uint16_t getSlotSize(uint16_t slot_num) const;    // 获取指定槽位的记录大小
-    void setSlotSize(uint16_t slot_num, uint16_t size); // 设置指定槽位的记录大小
-
+     bool getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) const; // 获取槽位完整信息
     void compactify(); // 页面压缩（cpp 中为抛异常的空实现，后续可扩展）
 
+    uint16_t getSlotCount(const Page& page) {
+        return page.getHeader().slot_count;
+    }
     // 8. 私有数据成员（与 cpp 中初始化、操作逻辑完全匹配）
     PageHeader header_;                                  // 页面头部（元数据）
     char data_[PAGE_SIZE - sizeof(PageHeader)];          // 页面数据区（存储记录+槽位信息）

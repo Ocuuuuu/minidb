@@ -17,6 +17,9 @@ namespace minidb{
         uint32_t length;    // 列的长度（字节数），如 INTEGER=4, VARCHAR=20
         uint32_t offset;    // 该列在记录数据中的起始偏移位置（字节）
 
+        const std::string& get_name() const { return name; }
+
+        TypeId get_type() const { return type; }
 
         MyColumn(const std::string& col_name, TypeId col_type,uint32_t col_length, uint32_t col_offset);
 
