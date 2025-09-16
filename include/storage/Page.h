@@ -69,6 +69,15 @@ public:
     uint16_t getFreeSpace() const { return header_.free_space; }
     PageType getPageType() const { return header_.page_type; }
     void setPageType(PageType type) { header_.page_type = type; }
+    // 新增方法：获取数据区大小
+    size_t getDataSize() const { return sizeof(data_); }
+
+    // 新增方法：获取数据区指针（只读）
+    const char* getDataPtr() const { return data_; }
+
+    // 新增方法：获取数据区指针（可写）
+    char* getDataPtr() { return data_; }
+    bool getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) const; // 获取槽位完整信息
 
     // 获取下一条记录（按槽位顺序）
     bool getNextRecord(RID& rid) const;
@@ -79,7 +88,7 @@ private:
     void setSlotOffset(uint16_t slot_num, uint16_t offset); // 设置指定槽位的记录偏移
     uint16_t getSlotSize(uint16_t slot_num) const;    // 获取指定槽位的记录大小
     void setSlotSize(uint16_t slot_num, uint16_t size); // 设置指定槽位的记录大小
-    bool getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) const; // 获取槽位完整信息
+
     void compactify(); // 页面压缩（cpp 中为抛异常的空实现，后续可扩展）
 
     // 8. 私有数据成员（与 cpp 中初始化、操作逻辑完全匹配）

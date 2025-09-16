@@ -5,41 +5,42 @@
 #include "common/Constants.h"
 #include <cstring>
 #include <sstream>
-
+#include <iostream>
 namespace minidb {
 namespace storage {
 
 // ====================== 构造函数 ======================
-Page::Page() : pin_count_(0) {
-    header_.page_id = INVALID_PAGE_ID;
-    header_.page_type = PageType::DATA_PAGE;
-    header_.slot_count = 0;
-    header_.is_dirty = false;
-    header_.next_free_page = INVALID_PAGE_ID;
+    Page::Page() : pin_count_(0) {
+        header_.page_id = INVALID_PAGE_ID;
+        header_.page_type = PageType::DATA_PAGE;
+        header_.slot_count = 0;
+        header_.is_dirty = false;
+        header_.next_free_page = INVALID_PAGE_ID;
 
-    // ✅ 正确初始化：
-    // - 槽位数组从 data_[0] 开始
-    // - 记录数据从 PAGE_SIZE 向下生长（空闲空间顶部）
-    header_.free_space_offset = PAGE_SIZE;  // 下一条记录将写入的位置（从高往低）
-    header_.free_space = PAGE_SIZE - sizeof(PageHeader);  // 总可用空间（用于检查）
+        // ✅ 正确初始化：free_space_offset 应该是数据区的起始偏移
+        header_.free_space_offset = 0;  // 从数据区开头开始使用
+        header_.free_space = sizeof(data_);  // 总可用空间 = 数据区大小
 
-    memset(data_, 0, sizeof(data_));
-}
+        memset(data_, 0, sizeof(data_));
+    }
 
-Page::Page(PageID page_id) : Page() {
-    header_.page_id = page_id;
-}
+    Page::Page(PageID page_id) : Page() {
+        header_.page_id = page_id;
+    }
 
-// ====================== 序列化/反序列化 ======================
-void Page::serialize(char* dest) const {
-    memcpy(dest, &header_, sizeof(PageHeader));
-    memcpy(dest + sizeof(PageHeader), data_, PAGE_SIZE - sizeof(PageHeader));
-}
+    // ====================== 序列化/反序列化 ======================
+    void Page::serialize(char* dest) const {
+        // 只序列化应该持久化的部分：header_ + data_
+        memcpy(dest, &header_, sizeof(PageHeader));
+        memcpy(dest + sizeof(PageHeader), data_, sizeof(data_));
+    }
 
-void Page::deserialize(const char* src) {
-    memcpy(&header_, src, sizeof(PageHeader));
-    memcpy(data_, src + sizeof(PageHeader), PAGE_SIZE - sizeof(PageHeader));
-}
+    void Page::deserialize(const char* src) {
+        // 只反序列化持久化的部分，不要覆盖pin_count_
+        memcpy(&header_, src, sizeof(PageHeader));
+        memcpy(data_, src + sizeof(PageHeader), sizeof(data_));
+        // pin_count_ 保持不变！
+    }
 
 // ====================== 空间检查 ======================
 bool Page::hasEnoughSpace(uint16_t required) const {
@@ -47,31 +48,31 @@ bool Page::hasEnoughSpace(uint16_t required) const {
     return header_.free_space >= total_needed;
 }
 
-// ====================== 插入记录 ======================
-bool Page::insertRecord(const char* record_data, uint16_t record_size, RID* rid) {
+    // ====================== 插入记录 ======================
+    bool Page::insertRecord(const char* record_data, uint16_t record_size, RID* rid) {
     if (!hasEnoughSpace(record_size)) {
         return false;
     }
 
-    // ✅ 从高地址向低地址分配记录空间
+    // ✅ 从 data_ 的末尾开始向下分配
     header_.free_space_offset -= record_size;
     uint16_t record_offset = header_.free_space_offset;
 
+    // ✅ 现在 record_offset <= PAGE_SIZE - sizeof(PageHeader)，不会越界
     memcpy(data_ + record_offset, record_data, record_size);
 
-    // 新槽位放在槽位数组末尾（data_ 起始处）
+    // 插入槽位（在 data_ 起始处）
     uint16_t new_slot_num = header_.slot_count;
     uint16_t* slot_offset_ptr = reinterpret_cast<uint16_t*>(data_ + new_slot_num * 4);
     uint16_t* slot_size_ptr = slot_offset_ptr + 1;
     *slot_offset_ptr = record_offset;
     *slot_size_ptr = record_size;
 
-    // 更新页头
     header_.slot_count++;
-    header_.free_space -= (record_size + 4);  // 减去记录和槽位占用的空间
+    header_.free_space -= (record_size + 4);
     header_.is_dirty = true;
 
-    if (rid != nullptr) {
+    if (rid) {
         rid->page_id = header_.page_id;
         rid->slot_num = new_slot_num;
     }
@@ -79,8 +80,8 @@ bool Page::insertRecord(const char* record_data, uint16_t record_size, RID* rid)
     return true;
 }
 
-// ====================== 获取记录 ======================
-bool Page::getRecord(const RID& rid, char* buffer, uint16_t* size) const {
+    // ====================== 获取记录 ======================
+    bool Page::getRecord(const RID& rid, char* buffer, uint16_t* size) const {
     if (!rid.isValid() || rid.page_id != header_.page_id || rid.slot_num >= header_.slot_count) {
         return false;
     }

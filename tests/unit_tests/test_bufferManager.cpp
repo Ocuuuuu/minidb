@@ -9,6 +9,7 @@
 #include <thread>
 #include <vector>
 #include <iostream>
+#include <iomanip>
 
 TEST_CASE("BufferManager basic functionality", "[buffermanager][storage][unit]")
 {
@@ -634,124 +635,6 @@ TEST_CASE("Serialization Debug Test", "[debug]")
     }
 }
 
-TEST_CASE("Content Specific Test", "[debug]")
-{
-    std::cout << "=== 内容特定测试 ===" << std::endl;
-
-    // 测试不同内容但相同长度的字符串
-    std::vector<std::string> test_cases = {
-        "ABCDEFGHIJKLMNOPQRSTUVW",     // 24字节，纯字母 (已知成功)
-        "Integration Test Record",      // 24字节，包含空格 (已知失败)
-        "IntegrationTestRecordXX",      // 24字节，无空格版本
-        "Integration-Test-Record",      // 24字节，用破折号替代空格
-        "Integration_Test_Record",      // 24字节，用下划线替代空格
-        "Integration.Test.Record",      // 24字节，用句号替代空格
-        "1234567890123456789012",       // 24字节，纯数字
-        "A B C D E F G H I J K L",     // 24字节，字母+空格
-    };
-
-    for (const auto& test_str : test_cases) {
-        std::cout << "\n--- 测试字符串: '" << test_str << "' ---" << std::endl;
-        std::cout << "长度: " << test_str.length() << " + 1 = " << (test_str.length() + 1) << std::endl;
-
-        // 独立Page测试
-        std::cout << "1. 独立Page测试:" << std::endl;
-        {
-            minidb::storage::Page page(1);
-            minidb::RID rid;
-
-            bool inserted = page.insertRecord(test_str.c_str(), test_str.length() + 1, &rid);
-            if (!inserted) {
-                std::cout << "   ❌ 插入失败" << std::endl;
-                continue;
-            }
-
-            // 序列化测试
-            char buffer[minidb::PAGE_SIZE];
-            page.serialize(buffer);
-
-            minidb::storage::Page new_page;
-            new_page.deserialize(buffer);
-
-            char result[100];
-            bool found = new_page.getRecord(rid, result, nullptr);
-
-            if (found && std::strcmp(result, test_str.c_str()) == 0) {
-                std::cout << "   ✅ 独立Page测试成功" << std::endl;
-            } else {
-                std::cout << "   ❌ 独立Page测试失败: '" << result << "'" << std::endl;
-                continue;
-            }
-        }
-
-        // BufferManager环境测试
-        std::cout << "2. BufferManager环境测试:" << std::endl;
-        {
-            auto file_manager = std::make_shared<minidb::storage::FileManager>();
-            std::string test_db = "test_content_db";
-
-            if (file_manager->databaseExists(test_db)) {
-                file_manager->deleteDatabase(test_db);
-            }
-
-            file_manager->createDatabase(test_db);
-            auto disk_manager = std::make_shared<minidb::storage::DiskManager>(file_manager);
-            minidb::storage::BufferManager buffer_manager(disk_manager, 10);
-
-            minidb::PageID page_id = disk_manager->allocatePage();
-            minidb::storage::Page* page = buffer_manager.fetchPage(page_id);
-
-            minidb::RID rid;
-            bool inserted = page->insertRecord(test_str.c_str(), test_str.length() + 1, &rid);
-            if (!inserted) {
-                std::cout << "   ❌ BufferManager插入失败" << std::endl;
-                file_manager->deleteDatabase(test_db);
-                continue;
-            }
-
-            // 立即读取测试
-            char immediate[100];
-            bool immediate_found = page->getRecord(rid, immediate, nullptr);
-            if (!immediate_found || std::strcmp(immediate, test_str.c_str()) != 0) {
-                std::cout << "   ❌ BufferManager立即读取失败: '" << immediate << "'" << std::endl;
-                file_manager->deleteDatabase(test_db);
-                continue;
-            }
-
-            // flush和磁盘读取测试
-            buffer_manager.unpinPage(page_id, true);
-            buffer_manager.flushPage(page_id);
-
-            char disk_buffer[minidb::PAGE_SIZE];
-            disk_manager->readPage(page_id, disk_buffer);
-
-            minidb::storage::Page disk_page;
-            disk_page.deserialize(disk_buffer);
-
-            char final_result[100];
-            bool final_found = disk_page.getRecord(rid, final_result, nullptr);
-
-            if (final_found && std::strcmp(final_result, test_str.c_str()) == 0) {
-                std::cout << "   ✅ BufferManager完整流程成功" << std::endl;
-            } else {
-                std::cout << "   ❌ BufferManager磁盘读取失败:" << std::endl;
-                std::cout << "      期望: '" << test_str << "'" << std::endl;
-                std::cout << "      实际: '" << final_result << "'" << std::endl;
-
-                // 字节对比
-                std::cout << "   字节对比 (前10字节):" << std::endl;
-                for (int i = 0; i < 10 && i < test_str.length() + 1; i++) {
-                    std::cout << "      [" << i << "] 期望: " << (int)test_str[i]
-                              << " ('" << test_str[i] << "'), 实际: "
-                              << (int)final_result[i] << " ('" << (char)final_result[i] << "')" << std::endl;
-                }
-            }
-
-            file_manager->deleteDatabase(test_db);
-        }
-    }
-}
-
 TEST_CASE("Debug Flush Issue", "[debug]")
 {
     auto file_manager = std::make_shared<minidb::storage::FileManager>();
@@ -798,6 +681,154 @@ TEST_CASE("Debug Flush Issue", "[debug]")
     }
 
     std::cout << "=== 测试结束 ===" << std::endl;
+}
+
+
+
+
+
+
+// 辅助函数：打印页面摘要
+void printPageInfo(minidb::storage::Page* page, const std::string& when) {
+    auto& header = page->getHeader();  // 假设 Page 有 getHeader() 返回 const Header&
+    std::cout << "\n=== Page Info - " << when << " ===" << std::endl;
+    std::cout << "Page ID: " << header.page_id << std::endl;
+    std::cout << "Slot Count: " << header.slot_count << std::endl;
+    std::cout << "Free Space Offset: " << header.free_space_offset << std::endl;
+    std::cout << "Free Space: " << header.free_space << std::endl;
+    std::cout << "Is Dirty: " << (header.is_dirty ? "Yes" : "No") << std::endl;
+
+    for (uint16_t i = 0; i < header.slot_count; ++i) {
+        uint16_t offset, size;
+        bool ok = page->getSlotInfo(i, &offset, &size);
+        if (!ok) {
+            std::cout << "Slot " << i << ": INVALID" << std::endl;
+            continue;
+        }
+
+        // 从 data_ 读取前几个字节用于显示
+        std::string preview;
+        int preview_len = std::min(static_cast<int>(size), 20);
+        for (int j = 0; j < preview_len; ++j) {
+            char c = page->getData()[offset + j];
+            if (c >= 32 && c <= 126) {
+                preview += c;
+            } else {
+                preview += '?';
+            }
+        }
+
+        std::cout << "Slot " << i
+                  << " -> offset=" << std::setw(4) << offset
+                  << ", size=" << std::setw(3) << size
+                  << ", data='" << preview << "'"
+                  << std::endl;
+    }
+    std::cout << "=== End Page Info ===\n" << std::endl;
+}
+
+TEST_CASE("Persistence and Full Page Debug Test", "[persistence][debug]") {
+    auto file_manager = std::make_shared<minidb::storage::FileManager>();
+    std::string test_db = "test_debug_db";
+
+    if (file_manager->databaseExists(test_db)) {
+        file_manager->deleteDatabase(test_db);
+    }
+
+    const char* test_data = "PersistentTestData123";
+    uint16_t data_len = std::strlen(test_data) + 1;  // 包含 '\0'
+    minidb::RID stored_rid;
+    minidb::PageID page_id;
+
+    // ==================== Phase 1: Write ====================
+    {
+        std::cout << "=== Phase 1: Writing data to disk ===" << std::endl;
+
+        file_manager->createDatabase(test_db);
+        auto disk_manager = std::make_shared<minidb::storage::DiskManager>(file_manager);
+        minidb::storage::BufferManager buffer_manager(disk_manager, 10);
+
+        page_id = disk_manager->allocatePage();
+        minidb::storage::Page* page = buffer_manager.fetchPage(page_id);
+
+        REQUIRE(page != nullptr);
+
+        std::cout << "Before insert:" << std::endl;
+        printPageInfo(page, "Before Insert");
+
+        bool inserted = page->insertRecord(test_data, data_len, &stored_rid);
+        REQUIRE(inserted);
+        std::cout << "✅ Inserted record: '" << test_data << "' (length: " << data_len << ")" << std::endl;
+
+        std::cout << "After insert:" << std::endl;
+        printPageInfo(page, "After Insert");
+
+        // 额外验证：读取刚插入的记录
+        char read_data[100];
+        uint16_t read_size;
+        bool found = page->getRecord(stored_rid, read_data, &read_size);
+        REQUIRE(found);
+        REQUIRE(read_size == data_len);
+        REQUIRE(std::strcmp(read_data, test_data) == 0);
+        std::cout << "✅ Self-check: Read back immediately: '" << read_data << "' (size: " << read_size << ")" << std::endl;
+
+        buffer_manager.unpinPage(page_id, true);
+        buffer_manager.flushAllPages();
+    }
+
+    std::cout << "Phase 1 completed. Simulating restart..." << std::endl;
+
+    // 在 Phase 1 结束后，直接读取磁盘文件验证内容
+    std::ifstream file(test_db + ".db", std::ios::binary);
+    if (file) {
+        file.seekg(page_id * 4096); // 跳到页面起始位置
+        char disk_page[4096];
+        file.read(disk_page, 4096);
+
+        std::cout << "Raw disk content at page " << page_id << ":" << std::endl;
+        for (int i = 0; i < 100; i++) { // 只显示前100字节
+            std::cout << std::hex << std::setw(2) << std::setfill('0')
+                      << (int)(unsigned char)disk_page[i] << " ";
+            if ((i + 1) % 16 == 0) std::cout << std::endl;
+        }
+        std::cout << std::dec << std::endl;
+    }
+
+    // ==================== Phase 2: Read after restart ====================
+    {
+        std::cout << "=== Phase 2: Reading after restart ===" << std::endl;
+
+        auto disk_manager = std::make_shared<minidb::storage::DiskManager>(file_manager);
+        minidb::storage::BufferManager buffer_manager(disk_manager, 10);
+
+        minidb::storage::Page* page = buffer_manager.fetchPage(page_id);
+        REQUIRE(page != nullptr);
+
+        std::cout << "After restart, page info:" << std::endl;
+        printPageInfo(page, "After Restart");
+
+        char read_data[100];
+        uint16_t read_size;
+        bool found = page->getRecord(stored_rid, read_data, &read_size);
+
+        std::cout << "Restart read result: " << (found ? "Success" : "Failed") << std::endl;
+        if (found) {
+            std::cout << "Read data: '" << read_data << "' (length: " << read_size << ")" << std::endl;
+        }
+
+        REQUIRE(found);
+        REQUIRE(read_size == data_len);
+        REQUIRE(std::strcmp(read_data, test_data) == 0);
+
+        std::cout << "✅ Persistence Test PASSED! Data survived restart." << std::endl;
+
+        buffer_manager.unpinPage(page_id, false);
+    }
+
+    // 清理
+    if (file_manager->databaseExists(test_db)) {
+        file_manager->deleteDatabase(test_db);
+    }
 }
 
 TEST_CASE("BufferManager concurrent access", "[buffermanager][concurrency][unit]")
