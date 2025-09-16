@@ -211,7 +211,6 @@ bool Page::getNextRecord(RID& rid) {
 
         return false; // 没有更多记录
     }
-
 // ====================== 页面压缩（简化版，暂未实现完整逻辑） ======================
 void Page::compactify() {
     throw NotImplementedException("Page compactify not implemented yet");

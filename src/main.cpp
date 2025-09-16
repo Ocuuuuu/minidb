@@ -12,7 +12,7 @@
 //
 // using namespace minidb;
 //
-// // 清理测试文件
+// // ??????????
 // void cleanup_test_files(const std::string& base_name) {
 //     std::vector<std::string> extensions = {".minidb", ".db", ""};
 //     for (const auto& ext : extensions) {
@@ -23,7 +23,7 @@
 //     }
 // }
 //
-// // 创建测试 Pager
+// // ???????? Pager
 // std::shared_ptr<storage::Pager> create_test_pager(const std::string& db_filename) {
 //     cleanup_test_files(db_filename);
 //
@@ -44,17 +44,17 @@
 //         auto pager = create_test_pager("pager_test.db");
 //         std::cout << "Pager created successfully" << std::endl;
 //
-//         // 测试分配页面
+//         // ??????????
 //         std::cout << "Allocating page..." << std::endl;
 //         auto page_id = pager->allocatePage();
 //         std::cout << "Page allocated: " << page_id << std::endl;
 //
-//         // 测试获取页面 - 使用 getPage() 而不是 fetchPage()
+//         // ????????? - ??? getPage() ?????? fetchPage()
 //         std::cout << "Getting page..." << std::endl;
 //         storage::Page* page = pager->getPage(page_id);
 //         std::cout << "Page obtained: " << page->getPageId() << std::endl;
 //
-//         // 测试写入数据
+//         // ????д??????
 //         std::cout << "Writing data to page..." << std::endl;
 //         char* data = page->getData();
 //         data[0] = 'T';
@@ -62,10 +62,10 @@
 //         data[2] = 'S';
 //         data[3] = 'T';
 //
-//         // 标记页面为脏
+//         // ?????????
 //         page->setDirty(true);
 //
-//         // 释放页面
+//         // ??????
 //         std::cout << "Releasing page..." << std::endl;
 //         pager->releasePage(page_id, true);
 //
@@ -84,12 +84,12 @@
 //         auto pager = create_test_pager("tree_creation_test.db");
 //         std::cout << "Pager created successfully" << std::endl;
 //
-//         // 测试创建 B+树
+//         // ??????? B+??
 //         std::cout << "Creating B+Tree with INTEGER type..." << std::endl;
 //         engine::BPlusTree tree(pager, -1, TypeId::INTEGER);
 //         std::cout << "B+Tree created successfully" << std::endl;
 //
-//         // 测试基本属性
+//         // ???????????
 //         std::cout << "Tree height: " << tree.get_height() << std::endl;
 //         std::cout << "Node count: " << tree.get_node_count() << std::endl;
 //
@@ -135,19 +135,19 @@
 //         std::cout << "Initial tree state:" << std::endl;
 //         std::cout << "Height: " << tree.get_height() << std::endl;
 //         std::cout << "Node count: " << tree.get_node_count() << std::endl;
-//         std::cout << "Root page ID: " << tree.get_root_page_id() << std::endl; // 添加这个
+//         std::cout << "Root page ID: " << tree.get_root_page_id() << std::endl; // ??????
 //
-//         // 插入单个值
+//         // ???????
 //         std::cout << "Inserting value 42 with RID(1, 10)..." << std::endl;
 //         RID rid1(1, 10);
 //
-//         // 在插入前检查pager状态
+//         // ?????????pager??
 //         std::cout << "Pager page count before insert: " << pager->getPageCount() << std::endl;
 //
 //         bool insert_result = tree.insert(Value(42), rid1);
 //         std::cout << "Insert result: " << insert_result << std::endl;
 //
-//         // 在插入后检查状态
+//         // ??????????
 //         std::cout << "Pager page count after insert: " << pager->getPageCount() << std::endl;
 //         std::cout << "Root page ID after insert: " << tree.get_root_page_id() << std::endl;
 //
@@ -155,7 +155,7 @@
 //         std::cout << "Height: " << tree.get_height() << std::endl;
 //         std::cout << "Node count: " << tree.get_node_count() << std::endl;
 //
-//         // 搜索插入的值
+//         // ??????????
 //         std::cout << "Searching for inserted value 42..." << std::endl;
 //         RID search_result = tree.search(Value(42));
 //         std::cout << "Search result isValid: " << search_result.isValid() << std::endl;
@@ -186,7 +186,7 @@
 //         auto pager = create_test_pager("multiple_inserts_test.db");
 //         engine::BPlusTree tree(pager, -1, TypeId::INTEGER);
 //
-//         // 插入多个值
+//         // ???????
 //         std::vector<int> values = {42, 25, 60, 10, 35, 50, 75};
 //
 //         for (size_t i = 0; i < values.size(); ++i) {
@@ -200,7 +200,7 @@
 //         std::cout << "Height: " << tree.get_height() << std::endl;
 //         std::cout << "Node count: " << tree.get_node_count() << std::endl;
 //
-//         // 验证所有插入的值都能找到
+//         // ??????в????????????
 //         for (size_t i = 0; i < values.size(); ++i) {
 //             RID result = tree.search(Value(values[i]));
 //             if (result.isValid()) {
@@ -210,7 +210,7 @@
 //             }
 //         }
 //
-//         // 测试不存在的值
+//         // ???????????
 //         RID not_found = tree.search(Value(999));
 //         if (!not_found.isValid()) {
 //             std::cout << "? Correctly did not find non-existent value 999" << std::endl;
@@ -230,7 +230,7 @@
 //     std::cout << "=== Starting Comprehensive B+Tree Test ===" << std::endl;
 //
 //     try {
-//         // 运行各个测试模块
+//         // ???и??????????
 //         test_pager_operations();
 //         test_bplus_tree_creation();
 //         test_bplus_tree_search_empty();
@@ -272,31 +272,31 @@
 #include "../include/engine/catalog/catalog_manager.h"
 #include "../include/storage/BufferManager.h"
 #include "../include/storage/DiskManager.h"
-#include "../include/storage/FileManager.h" // 需要包含 FileManager 头文件
-#include "json.hpp"  // 包含 JSON 库
+#include "../include/storage/FileManager.h" //
+#include "json.hpp"  //
 #include "common/QueryResult.h"
 
 using namespace minidb;
 
 int main() {
-    // 创建 FileManager 实例
+    // ???? FileManager ???
     auto fileManager = std::make_shared<storage::FileManager>();
-    std::string db_name = "my_database"; // 数据库名
-    fileManager->createDatabase(db_name); // 创建数据库
+    std::string db_name = "my_database"; // ???????
+    fileManager->createDatabase(db_name); // ?????????
 
-    // 创建 DiskManager 实例
+    // ???? DiskManager ???
     auto diskManager = std::make_shared<storage::DiskManager>(fileManager);
 
-    // 创建 CatalogManager 实例
+    // ???? CatalogManager ???
     auto catalogManager = std::make_shared<CatalogManager>();
 
-    // 创建 BufferManager 实例
+    // ???? BufferManager ???
     auto bufferManager = std::make_shared<storage::BufferManager>(diskManager);
 
-    // 创建 ExecutionEngine 实例
+    // ???? ExecutionEngine ???
     ExecutionEngine engine(catalogManager, bufferManager);
 
-    // 1. 测试创建表
+    // 1. ?????????
     nlohmann::json createTablePlan = {
         {"type", "CreateTable"},
         {"tableName", "Students"},
@@ -306,11 +306,11 @@ int main() {
         }}
     };
 
-    // 执行创建表的操作
+    // ??д?????????
     engine.executePlan(createTablePlan);
     std::cout << "Table 'Students' created." << std::endl;
 
-    // 2. 测试插入数据
+    // 2. ???????????
     nlohmann::json insertPlan1 = {
         {"type", "Insert"},
         {"tableName", "Students"},
@@ -328,7 +328,7 @@ int main() {
     engine.executePlan(insertPlan2);
     std::cout << "Inserted record into 'Students': Bob, 22." << std::endl;
 
-    // 3. 测试选择数据
+    // 3. ???????????
     nlohmann::json selectPlan = {
         {"type", "Select"},
         {"tableName", "Students"},
@@ -337,7 +337,7 @@ int main() {
 
     QueryResult selectResult = engine.executePlan(selectPlan);
 
-    // 打印选择结果
+    // ????????
     std::cout << "Selected records:" << std::endl;
     for (size_t i = 0; i < selectResult.rowCount(); ++i) {
         const auto& row = selectResult.getRow(i);
@@ -347,7 +347,7 @@ int main() {
         std::cout << std::endl;
     }
 
-    // 4. 测试删除数据
+    // 4. ???????????
     nlohmann::json deletePlan = {
         {"type", "Delete"},
         {"tableName", "Students"},
@@ -360,7 +360,7 @@ int main() {
     engine.executePlan(deletePlan);
     std::cout << "Deleted record from 'Students': Alice." << std::endl;
 
-    // 验证删除后再进行选择
+    // ????????????????
     selectResult = engine.executePlan(selectPlan);
     std::cout << "Selected records after deletion:" << std::endl;
     for (size_t i = 0; i < selectResult.rowCount(); ++i) {
