@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "common/Token.h"
+#include "common/TokenType.h"
 using namespace std;
 
 //词法分析器类（将SQL字符串拆分为Token序列）
@@ -38,6 +39,7 @@ public:
     Token nextToken();
     //获取所有Token 直到遇到EOF_Token
     vector<Token> getAllTokens();
+
 };
 
 #endif //MINIDB_LEXER_H
