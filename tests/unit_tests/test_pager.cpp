@@ -320,3 +320,4 @@ TEST_CASE("Pager Integration with BufferManager", "[storage][pager][integration]
         // (Note: This depends on BufferManager implementation)
     }
 }
+
