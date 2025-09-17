@@ -25,6 +25,8 @@ namespace minidb {
         QueryResult executeInsert(const nlohmann::json &plan);
         QueryResult executeSelect(const nlohmann::json &plan);
 
+
+        QueryResult executeProject(const nlohmann::json &plan); // 新增
         QueryResult executeDelete(const nlohmann::json &plan);
         QueryResult executeUpdate(const nlohmann::json &plan);
 

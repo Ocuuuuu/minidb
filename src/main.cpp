@@ -602,3 +602,85 @@
 //     }
 //     return 0;
 // }
+
+#include <iostream>
+
+#include "engine/ExecutionEngine.h" // 执行引擎
+#include "compiler/SQLCompiler.h"
+#include "storage/BufferManager.h"  // 缓存管理
+#include <string>
+#include "json.hpp"                     // nlohmann::json
+#include <memory>
+#include "storage/FileManager.h"
+#include "storage/DiskManager.h"
+
+#include "engine/catalog/catalog_manager.h"
+
+#include <iostream>
+#include <memory>
+#include <string>
+#include "engine/ExecutionEngine.h"   // 执行引擎
+#include "compiler/SQLCompiler.h"     // SQL 编译器
+#include "storage/FileManager.h"      // 文件管理
+#include "storage/DiskManager.h"      // 磁盘管理
+#include "storage/BufferManager.h"    // 缓存管理
+#include "engine/catalog/catalog_manager.h"
+#include "json.hpp"                   // nlohmann::json
+
+using json = nlohmann::json;
+using namespace minidb;
+
+int main() {
+    // === 初始化数据库组件 ===
+    auto fileManager   = std::make_shared<storage::FileManager>();
+    std::string dbName = "my_database";
+
+    // 如果存在旧数据库文件，可以选择删除重建
+    if (fileManager->databaseExists(dbName)) {
+        std::cout << "Database file already exists. Deleting it...\n";
+        fileManager->deleteDatabase(dbName);
+    }
+    fileManager->createDatabase(dbName);
+
+    auto diskManager   = std::make_shared<storage::DiskManager>(fileManager);
+    auto bufferManager = std::make_shared<storage::BufferManager>(diskManager);
+    auto catalog       = std::make_shared<CatalogManager>();
+
+    ExecutionEngine engine(catalog, bufferManager);
+    SQLCompiler compiler(*catalog); // 这里传引用，按你编译器构造函数需要的类型修改
+
+    std::cout << "MiniDB 已启动，可以输入 SQL 语句，输入 exit/quit 退出。\n";
+
+    std::string sql;
+    while (true) {
+        std::cout << "minidb> ";
+        if (!std::getline(std::cin, sql)) break; // Ctrl+D/Ctrl+Z 退出
+        if (sql.empty()) continue;
+
+        // 用户输入 exit/quit 退出
+        if (sql == "exit" || sql == "quit") break;
+
+        // 必须保证 SQL 以分号结尾
+        if (sql.back() != ';') {
+            std::cerr << "[提示] 请输入完整 SQL 并以分号 ; 结尾\n";
+            continue;
+        }
+
+        try {
+            // 1. 编译 SQL 成执行计划
+            json plan = compiler.compile(sql);
+
+            // 2. 执行计划
+            QueryResult result = engine.executePlan(plan);
+
+            // 3. 打印结果
+            result.print(); // 用你的无参数 print()
+
+        } catch (const std::runtime_error &e) {
+            std::cerr << "[编译/执行错误] " << e.what() << "\n";
+        }
+    }
+
+    std::cout << "MiniDB 已退出。\n";
+    return 0;
+}

@@ -40,36 +40,68 @@ PageID ExecutionEngine::appendNewPageToTable(TableInfo *table_info) {
     return new_pid;
 }
 
-QueryResult ExecutionEngine::executeCreateTable(const nlohmann::json &plan) {
+// QueryResult ExecutionEngine::executeCreateTable(const nlohmann::json &plan) {
+//     std::string tableName = plan["tableName"];
+//     Schema schema;
+//
+//     uint32_t offset = 0;
+//     for (const auto &col : plan["columns"]) {
+//         TypeId type_id = catalog_->getTypeIdFromString(col["type"]);
+//         uint32_t length = (type_id == TypeId::VARCHAR) ? 255 : 4;
+//         schema.addColumn(MyColumn(col["name"], type_id, length, offset));
+//         offset += length;
+//     }
+//
+//     if (!catalog_->create_table(tableName, schema)) {
+//         handleError("Failed to create table: " + tableName);
+//     }
+//
+//     TableInfo *table_info = catalog_->get_table(tableName);
+//     if (!table_info) {
+//         handleError("Table creation failed: " + tableName);
+//     }
+//
+//     PageID first_page_id = bufferManager_->allocatePage();
+//     storage::Page *page = bufferManager_->fetchPage(first_page_id);
+//     page->initAsDataPage();
+//     page->setNextPageId(INVALID_PAGE_ID);
+//     page->setDirty(true);
+//
+//     table_info->setFirstPageID(first_page_id);
+//
+//     return QueryResult();
+// }
+
+
+    QueryResult ExecutionEngine::executeCreateTable(const nlohmann::json &plan) {
     std::string tableName = plan["tableName"];
-    Schema schema;
+    try {
+        Schema schema;
+        for (auto &col : plan["columns"]) {
+            std::string name = col["name"];
+            std::string typeStr = col["type"];
 
-    uint32_t offset = 0;
-    for (const auto &col : plan["columns"]) {
-        TypeId type_id = catalog_->getTypeIdFromString(col["type"]);
-        uint32_t length = (type_id == TypeId::VARCHAR) ? 255 : 4;
-        schema.addColumn(MyColumn(col["name"], type_id, length, offset));
-        offset += length;
+            // 转大写，兼容大小写和 INT
+            std::transform(typeStr.begin(), typeStr.end(), typeStr.begin(), ::toupper);
+
+            if (typeStr == "INT" || typeStr == "INTEGER") {
+                schema.addColumn(MyColumn(name, TypeId::INTEGER, 4, schema.get_length()));
+            } else if (typeStr == "VARCHAR") {
+                schema.addColumn(MyColumn(name, TypeId::VARCHAR, 255, schema.get_length()));
+            } else {
+                throw std::runtime_error("Unknown column type: " + typeStr);
+            }
+        }
+
+        catalog_->create_table(tableName, schema);
+
+        QueryResult res;
+        std::cout << "[OK] Table created: " << tableName << "\n";
+        return res;
+
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to create table '" + tableName + "': " + e.what());
     }
-
-    if (!catalog_->create_table(tableName, schema)) {
-        handleError("Failed to create table: " + tableName);
-    }
-
-    TableInfo *table_info = catalog_->get_table(tableName);
-    if (!table_info) {
-        handleError("Table creation failed: " + tableName);
-    }
-
-    PageID first_page_id = bufferManager_->allocatePage();
-    storage::Page *page = bufferManager_->fetchPage(first_page_id);
-    page->initAsDataPage();
-    page->setNextPageId(INVALID_PAGE_ID);
-    page->setDirty(true);
-
-    table_info->setFirstPageID(first_page_id);
-
-    return QueryResult();
 }
 
 QueryResult ExecutionEngine::executeInsert(const nlohmann::json &plan) {
@@ -119,39 +151,10 @@ QueryResult ExecutionEngine::executeInsert(const nlohmann::json &plan) {
         }
     }
     page->setDirty(true);
-
+    cout<<"insert ok"<<endl;
     return QueryResult();
 }
 
-// QueryResult ExecutionEngine::executeSelect(const nlohmann::json &plan) {
-//     std::string tableName = plan["tableName"];
-//     std::vector<std::string> columns = plan["columns"];
-//
-//     const TableInfo *table_info = catalog_->get_table(tableName);
-//     if (!table_info) handleError("Table does not exist: " + tableName);
-//
-//     QueryResult result;
-//     scanTablePages(table_info, [&](storage::Page *page, RID &rid) {
-//         char buffer[PAGE_SIZE];
-//         if (page->getRecord(rid, buffer)) {
-//             std::vector<std::string> rowValues;
-//             for (const auto &column : columns) {
-//                 uint32_t colIndex = table_info->get_schema().get_column_index(column);
-//                 const MyColumn &columnInfo = table_info->get_schema().get_column(colIndex);
-//                 if (columnInfo.type == TypeId::INTEGER) {
-//                     rowValues.push_back(std::to_string(*reinterpret_cast<int32_t *>(buffer + columnInfo.offset)));
-//                 } else if (columnInfo.type == TypeId::BOOLEAN) {
-//                     rowValues.push_back(*reinterpret_cast<bool *>(buffer + columnInfo.offset) ? "true" : "false");
-//                 } else if (columnInfo.type == TypeId::VARCHAR) {
-//                     rowValues.push_back(std::string(buffer + columnInfo.offset));
-//                 }
-//             }
-//             result.addRow(rowValues);
-//         }
-//     });
-//     return result;
-// }
-//
 
 
     // SELECT 执行
@@ -222,6 +225,7 @@ QueryResult ExecutionEngine::executeDelete(const nlohmann::json &plan) {
             page->setDirty(true);
         });
     }
+    cout<<"delete ok"<<endl;
     return QueryResult();
 }
 
@@ -307,6 +311,46 @@ QueryResult ExecutionEngine::executeUpdate(const nlohmann::json &plan) {
 //         result.addRow(row);
 //     }
 // }
+
+//     QueryResult ExecutionEngine::executeProject(const nlohmann::json &plan) {
+//     // 从Project计划中提取输入（SeqScan）和要投影的列
+//     auto input = plan["input"];
+//     if (input["type"] != "SeqScan") {
+//         throw std::runtime_error("Unsupported input type in Project operator");
+//     }
+//
+//     // 构建一个Select计划
+//     nlohmann::json selectPlan;
+//     selectPlan["type"] = "Select";
+//     selectPlan["tableName"] = input["tableName"];
+//     selectPlan["columns"] = plan["columns"]; // 要投影的列
+//
+//     // 调用现有的executeSelect方法
+//     return executeSelect(selectPlan);
+// }
+
+    QueryResult ExecutionEngine::executeProject(const nlohmann::json &plan) {
+    // 从Project计划中提取输入（SeqScan）和要投影的列
+    auto input = plan["input"];
+    if (input["type"] != "SeqScan") {
+        throw std::runtime_error("Unsupported input type in Project operator");
+    }
+
+    // 构建一个Select计划
+    nlohmann::json selectPlan;
+    selectPlan["type"] = "Select";
+    selectPlan["tableName"] = input["tableName"];
+    selectPlan["columns"] = plan["columns"]; // 要投影的列
+
+    // 检查是否有条件
+    if (input.contains("condition")) {
+        selectPlan["condition"] = input["condition"];
+    }
+
+    // 调用现有的executeSelect方法
+    return executeSelect(selectPlan);
+}
+
     void ExecutionEngine::scanSinglePage(PageID pid, const Schema &schema, QueryResult &result) {
     storage::Page* page = bufferManager_->fetchPage(pid);
     uint16_t slot_count = page->getSlotCount();
@@ -362,15 +406,26 @@ QueryResult ExecutionEngine::executeUpdate(const nlohmann::json &plan) {
 }
 
 
-
-QueryResult ExecutionEngine::executePlan(const nlohmann::json &plan) {
+    QueryResult ExecutionEngine::executePlan(const nlohmann::json &plan) {
     std::string type = plan["type"];
-    if (type == "CreateTable") return executeCreateTable(plan);
-    else if (type == "Insert") return executeInsert(plan);
-    else if (type == "Select") return executeSelect(plan);
-    else if (type == "Delete") return executeDelete(plan);
-    else if (type == "Update") return executeUpdate(plan);
-    else throw std::runtime_error("Unsupported execution plan type: " + type);
-}
 
+    // ==== 新增调试输出 ====
+    std::cout << "[DEBUG] executePlan type: " << type << "\n"
+              << "[DEBUG] JSON plan:\n" << plan.dump(2) << std::endl;
+
+    if (type == "CreateTable")
+        return executeCreateTable(plan);
+    else if (type == "Insert")
+        return executeInsert(plan);
+    else if (type == "Select")
+        return executeSelect(plan);
+    else if (type == "Project")   // 新增
+        return executeProject(plan);
+    else if (type == "Delete")
+        return executeDelete(plan);
+    else if (type == "Update")
+        return executeUpdate(plan);
+    else
+        throw std::runtime_error("Unsupported execution plan type: " + type);
+}
 } // namespace minidb

@@ -28,11 +28,15 @@ namespace minidb {
             void flush();
             PageID getPageCount() const;
             PageID getFreeListHead() const { return free_list_head_; }
+            bool isPageAllocated(PageID page_id) const;  // 新增：检查页面是否已分配
+
 
         private:
             std::shared_ptr<FileManager> file_manager_;
             PageID page_count_{1};
             PageID free_list_head_{INVALID_PAGE_ID};
+            PageID getNextFreePage(PageID page_id) const;      // 新增：获取下一个空闲页面
+            void setNextFreePage(PageID page_id, PageID next_page_id);  // 新增：设置下一个空闲页面
             mutable std::mutex io_mutex_;
 
             void readHeader();

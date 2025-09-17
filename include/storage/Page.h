@@ -107,12 +107,13 @@ public:
     // uint32_t getFreeSpace() const {
     //     return header_.free_space;
     // }
+    bool getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) const; // 获取槽位完整信息
 
 private:
     // 7. 私有辅助函数（与 cpp 中槽位操作逻辑匹配，仅内部调用）
     uint16_t getSlotOffset(uint16_t slot_num) const;  // 获取指定槽位的记录偏移
     void setSlotOffset(uint16_t slot_num, uint16_t offset); // 设置指定槽位的记录偏移
-     bool getSlotInfo(uint16_t slot_num, uint16_t* offset, uint16_t* size) const; // 获取槽位完整信息
+
     void compactify(); // 页面压缩（cpp 中为抛异常的空实现，后续可扩展）
 
     uint16_t getSlotCount(const Page& page) {

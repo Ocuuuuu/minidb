@@ -147,7 +147,7 @@ Parser::Parser(const std::vector<Token>& tokenList)
         throw runtime_error("Token序列为空，无法进行语法分析");
     }
 
-    std::cout << "Cached Tokens: " << tokensToString(tokens) << std::endl;
+    // std::cout << "Cached Tokens: " << tokensToString(tokens) << std::endl;
 
     //初始化当前Token
     currentToken = tokens[tokenPos];
